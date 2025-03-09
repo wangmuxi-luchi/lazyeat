@@ -20,7 +20,9 @@ Lazyeat 是吃饭时使用的免触碰控制器！吃饭时看剧/刷网页不�
 
 [大模型](https://alphacephei.com/vosk/models/vosk-model-cn-0.22.zip)
 
-下载后解压到`exe\model`文件夹下,才能使用语音识别功能
+下载后解压到 `exe` 同级的 `model` 文件夹下,才能使用语音识别功能
+
+![img.png](img.png)
 
 [//]: # (# 📝 TODO)
 
