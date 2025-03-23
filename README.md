@@ -41,10 +41,6 @@ Lazyeat 是吃饭时使用的免触碰控制器！吃饭时看剧/刷网页不�
 
 [//]: # "# 📚 References"
 
-# 📃 License
-
-[LICENSE](./LICENSE)
-
 # Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=maplelost/lazyeat&type=Date)](https://www.star-history.com/#maplelost/lazyeat&Date)
