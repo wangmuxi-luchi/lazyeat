@@ -8,6 +8,7 @@
 ![GitHub forks](https://img.shields.io/github/forks/maplelost/lazyeat?style=flat)
 
 [English README](README_EN.md)
+
 </div>
 </h1>
 
@@ -17,7 +18,9 @@ Lazyeat 吃饭时看剧/刷网页不想沾油手？
 
 对着摄像头比划手势就能暂停视频/全屏/切换视频！
 
-如果你觉得对你有用的话，不妨给我一个 star⭐吧~
+如果你觉得对你有用的话，不妨给我一个 star⭐ 吧~
+
+如果有任何的想法或者建议，都可以在 [Discussions](https://github.com/maplelost/lazyeat/discussions) 中讨论喔！
 
 # 🌠 截图
 
