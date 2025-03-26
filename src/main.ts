@@ -1,8 +1,11 @@
 import { createApp } from "vue";
 import App from "./App.vue";
 import { create } from "naive-ui";
-import { NButton } from "naive-ui";
+
+import { createPinia } from "pinia";
+
 import {
+  NButton,
   NLayout,
   NLayoutHeader,
   NLayoutContent,
@@ -16,6 +19,10 @@ import {
   NSpin,
   NIcon,
   NCard,
+  NInput,
+  NForm,
+  NFormItem,
+  NCheckbox,
 } from "naive-ui";
 
 // 引入element-plus
@@ -36,11 +43,17 @@ const naive = create({
     NSelect,
     NSpin,
     NIcon,
+    NInput,
+    NForm,
+    NFormItem,
+    NCheckbox,
     NCard,
   ],
 });
 
 const app = createApp(App);
+const pinia = createPinia();
 
 app.use(naive);
+app.use(pinia);
 app.mount("#app");
