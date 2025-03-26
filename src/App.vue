@@ -5,6 +5,12 @@ import Home from "./view/Home.vue";
 import pyApi from "./py_api";
 import { onMounted, ref } from "vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import use_app_store from "./store/app";
+import {
+  saveWindowState,
+  StateFlags,
+  restoreStateCurrent,
+} from "@tauri-apps/plugin-window-state";
 
 const ready = ref(false);
 
@@ -19,9 +25,38 @@ onMounted(async () => {
   }, 1000);
 
   await getCurrentWindow().onCloseRequested(async () => {
-    pyApi.shutdown();
+    await saveWindowState(StateFlags.ALL);
+    await pyApi.shutdown();
   });
 });
+
+// 窗口恢复上一次状态
+onMounted(() => {
+  restoreStateCurrent(StateFlags.ALL);
+});
+
+// app_store 数据加载
+import { watch } from "vue";
+import { LazyStore } from "@tauri-apps/plugin-store";
+
+const app_store = use_app_store();
+const app_store_json = new LazyStore("settings.json");
+onMounted(async () => {
+  const config_data = await app_store_json.get("config");
+  console.log("config_data", config_data);
+  if (config_data) {
+    app_store.config = JSON.parse(JSON.stringify(config_data));
+  }
+});
+
+watch(
+  () => app_store.config,
+  async (value) => {
+    await app_store_json.set("config", value);
+    app_store_json.save();
+  },
+  { deep: true }
+);
 </script>
 
 <template>

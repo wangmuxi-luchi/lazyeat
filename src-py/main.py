@@ -1,13 +1,21 @@
 import threading
+from typing import TYPE_CHECKING
 
 import cv2
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from MyDetector import MyDetector
+
+import sys
+import os
+if hasattr(sys, 'frozen'):
+    # pyinstaller打包成exe时，sys.argv[0]的值是exe的路径
+    # os.path.dirname(sys.argv[0])可以获取exe的所在目录
+    # os.chdir()可以将工作目录更改为exe的所在目录
+    os.chdir(os.path.dirname(sys.argv[0]))
 
 app = FastAPI()
 app.add_middleware(
@@ -28,8 +36,9 @@ class Config:
 CONFIG = Config()
 
 cap = cv2.VideoCapture(CONFIG.camera_index)
-# https://blog.csdn.net/NoamaNelson/article/details/103135056
-cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))  # 优化帧率
+# 2025年3月26日，待测试 https://blog.csdn.net/laizi_laizi/article/details/130230282 稳定取图速度
+fourcc = cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')
+cap.set(cv2.CAP_PROP_FOURCC, fourcc)  # 优化帧率
 
 work_thread_lock = threading.Lock()
 work_thread: threading.Thread = None
@@ -86,6 +95,7 @@ def thread_detect():
             cv2.imshow("Lazyeat Detect Window", img)
             cv2.waitKey(1)
         else:
+            # CONFIG.show_detect_window 改变需要关闭窗口
             try:
                 cv2.destroyAllWindows()
             except:
@@ -110,6 +120,8 @@ def toggle_work():
 
 @app.post("/update_config")
 def update_config(data: dict):
+    from pinia_store import PINIA_STORE
+
     global cap
     CONFIG.show_detect_window = data.get("show_window", False)
 
@@ -119,7 +131,12 @@ def update_config(data: dict):
         cap = cv2.VideoCapture(camera_index)
         cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))  # 优化帧率
         CONFIG.camera_index = camera_index
-    return "updated"
+
+    # 更新四个手指同时竖起发送的按键
+    new_key = data.get("four_fingers_up_send")
+    if new_key:
+        gesture_sender = PINIA_STORE.gesture_sender
+        gesture_sender.set_gesture_send(gesture_sender.four_fingers_up, new_key)
 
 
 @app.get("/shutdown")
