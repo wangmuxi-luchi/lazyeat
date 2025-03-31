@@ -1,14 +1,26 @@
 import cv2
 import mediapipe as mp
 import math
+import logging
+from enum import Enum
 
+# 定义手指状态的枚举
+class FingerStatus(Enum):
+    STRAIGHT_UP = 2  # 手指伸直且指向上方
+    STRAIGHT = 1     # 手指伸直
+    BENT = 0         # 手指弯曲
+    OTHER = -1       # 其他状态
 
 class HandDetector:
     """
     利用mediapipe寻找手， 得到手部关键点坐标. 能够检测出多少只手指是伸张的
     以及两个手指指尖的距离 ，对检测到的手计算它的锚框.
     """
-
+    # 配置日志
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    img_width = 0
+    img_height = 0
+    
     def __init__(self, mode=False, maxHands=2, detectionCon=0.5, minTrackCon=0.5):
         """
         :param mode: 在静态模式会对没一张图片进行检测：比较慢
@@ -70,6 +82,7 @@ class HandDetector:
 
         allHands = []
         h, w, c = img.shape
+        (self.img_height, self.img_width, _) = img.shape
         # print("multi_hand_landmarks")
         # print(self.results.multi_hand_landmarks)
         # print("self.results.multi_handedness")
@@ -195,6 +208,187 @@ class HandDetector:
         else:
             return length, info
 
+    def get_finger_status(self, myLmList, finger_id):
+        """
+        根据手指第一节骨头和最后一节骨头的角度判断手指是伸直还是弯曲。
+
+        :param myLmList: 手部关键点坐标列表
+        :param finger_id: 手指的 ID（0 为大拇指，1 为食指，依此类推）
+        :return: 手指状态，伸直为 1，弯曲为 0
+        """
+        # 获取手指相关的关键点索引
+        tip_id = self.tipIds[finger_id]
+        if finger_id == 0:  # 大拇指
+            joint1_point1 = myLmList[0][:2]
+            joint1_point2 = myLmList[tip_id - 3][:2]
+            joint2_point1 = myLmList[tip_id - 1][:2]
+            joint2_point2 = myLmList[tip_id][:2]
+            # base_id = tip_id - 2
+            # mid_id = tip_id - 1
+        else:
+            joint1_point1 = myLmList[0][:2]
+            joint1_point2 = myLmList[tip_id - 3][:2]
+            joint2_point1 = myLmList[tip_id - 3][:2]
+            joint2_point2 = myLmList[tip_id - 2][:2]
+            # base_id = 0
+            # root_id = tip_id - 3
+            # base_id = tip_id - 3
+            # mid_id = tip_id - 2
+
+        # 获取关键点的坐标
+        # tip_point = myLmList[tip_id][:2]
+        # base_point = myLmList[base_id][:2]
+        # mid_point = myLmList[mid_id][:2]
+
+        # 计算向量
+        vector1 = (joint1_point2[0] - joint1_point1[0], joint1_point2[1] - joint1_point1[1])
+        vector2 = (joint2_point2[0] - joint2_point1[0], joint2_point2[1] - joint2_point1[1])
+        # vector1 = (tip_point[0] - mid_point[0], tip_point[1] - mid_point[1])
+        # vector2 = (base_point[0] - mid_point[0], base_point[1] - mid_point[1])
+
+        # 计算向量的点积
+        dot_product = vector1[0] * vector2[0] + vector1[1] * vector2[1]
+
+        # 计算向量的模
+        magnitude1 = math.sqrt(vector1[0] ** 2 + vector1[1] ** 2)
+        magnitude2 = math.sqrt(vector2[0] ** 2 + vector2[1] ** 2)
+
+        # 检查是否存在零向量
+        if magnitude1 * magnitude2 == 0:
+            cos_angle = 0
+        else:
+            # 计算夹角的余弦值
+            cos_angle = dot_product / (magnitude1 * magnitude2)
+
+        # 确保 cos_angle 在 [-1, 1] 范围内
+        cos_angle = max(-1, min(1, cos_angle))
+
+        # 计算夹角（弧度）
+        angle = math.acos(cos_angle)
+
+        # 将弧度转换为角度
+        angle_degrees = math.degrees(angle)
+
+        # 根据角度判断手指状态
+        # return angle_degrees
+        if angle_degrees < 25:  # 可根据实际情况调整阈值
+            return 1  # 手指伸直
+        else:
+            return 0  # 手指弯曲
+
+    def get_all_fingers_status(self, myHand):
+        """
+        调用 get_finger_status 方法获取五根手指的状态，并返回一个列表。
+
+        :param myHand: 包含手部信息的字典，如关键点坐标、手部类型等
+        :return: 包含五根手指状态的列表，伸直为 1，弯曲为 0
+        """
+        myLmList = myHand["lmList"]
+        fingers_status = []
+
+        # 处理大拇指
+        thumb_status = self.get_finger_status(myLmList, 0)
+        fingers_status.append(thumb_status)
+
+        # 处理其他四根手指
+        for finger_id in range(1, 5):
+            finger_status = self.get_finger_status(myLmList, finger_id)
+            fingers_status.append(finger_status)
+
+        # finger_status = self.get_finger_status(myLmList, 1)
+        # fingers_status.append(finger_status)
+
+        return fingers_status
+
+
+    def get_index_tip_pixels(self, myHand):
+        """
+        获取食指指尖的像素坐标归一化。
+        :param myHand: 包含手部信息的字典，如关键点坐标、手部类型等
+        :return: 食指指尖的像素坐标归一化 (x, y)
+        """
+        myLmList = myHand["lmList"]
+        index_tip_id = self.tipIds[1]  # 食指指尖的关键点索引
+        index_tip_pixels = myLmList[index_tip_id][:2]  # 获取前两个元素，即 x 和 y 坐标
+
+        # 归一化
+        normalized_x = index_tip_pixels[0] / self.img_width
+        normalized_y = index_tip_pixels[1] / self.img_height
+        return normalized_x, normalized_y
+    
+    def detect_single_finger_state(self, myLmList, finger_id):
+        """
+        检测单个手指的状态。
+
+        :param myLmList: 手部关键点坐标列表
+        :param finger_id: 手指的 ID（0 为大拇指，1 为食指，依此类推）
+        :return: 手指的状态，使用 FingerStatus 枚举表示
+        """
+        # 获取手指相关的关键点索引
+        tip_id = self.tipIds[finger_id]
+        if finger_id == 0:  # 大拇指
+            base_id = tip_id - 1
+            mid_id = tip_id - 2
+        else:
+            base_id = tip_id - 3
+            mid_id = tip_id - 2
+
+        # 获取关键点的坐标
+        tip_point = myLmList[tip_id][:2]
+        base_point = myLmList[base_id][:2]
+        mid_point = myLmList[mid_id][:2]
+
+        # 计算向量
+        vector1 = (tip_point[0] - mid_point[0], tip_point[1] - mid_point[1])
+        vector2 = (mid_point[0] - base_point[0] , mid_point[1] - base_point[1] )
+
+        # 计算向量的点积
+        dot_product = vector1[0] * vector2[0] + vector1[1] * vector2[1]
+
+        # 计算向量的模
+        magnitude1 = math.sqrt(vector1[0] ** 2 + vector1[1] ** 2)
+        magnitude2 = math.sqrt(vector2[0] ** 2 + vector2[1] ** 2)
+
+        # 检查是否存在零向量
+        if magnitude1 * magnitude2 == 0:
+            cos_angle = 0
+        else:
+            # 计算夹角的余弦值
+            cos_angle = dot_product / (magnitude1 * magnitude2)
+
+        # 确保 cos_angle 在 [-1, 1] 范围内
+        cos_angle = max(-1, min(1, cos_angle))
+
+        # 计算夹角（弧度）
+        angle = math.acos(cos_angle)
+
+        # 将弧度转换为角度
+        angle_degrees = math.degrees(angle)
+
+        # 计算手指向量与垂直方向的夹角
+        finger_vector = (tip_point[0] - base_point[0], tip_point[1] - base_point[1])
+        vertical_vector = (0, -1)  # 垂直向上的向量
+        dot_product_vertical = finger_vector[0] * vertical_vector[0] + finger_vector[1] * vertical_vector[1]
+        magnitude_finger = math.sqrt(finger_vector[0] ** 2 + finger_vector[1] ** 2)
+        magnitude_vertical = math.sqrt(vertical_vector[0] ** 2 + vertical_vector[1] ** 2)
+        if magnitude_finger * magnitude_vertical == 0:
+            cos_angle_vertical = 0
+        else:
+            cos_angle_vertical = dot_product_vertical / (magnitude_finger * magnitude_vertical)
+        cos_angle_vertical = max(-1, min(1, cos_angle_vertical))
+        angle_vertical = math.degrees(math.acos(cos_angle_vertical))
+
+        logging.info(f"当前状态: {angle_degrees};{angle_vertical}")
+        # 根据角度判断手指状态
+        if angle_degrees < 25:  # 可根据实际情况调整阈值
+            if angle_vertical < 25:  # 判断手指是否几乎垂直，可根据实际情况调整阈值
+                return FingerStatus.STRAIGHT_UP
+            else:
+                return FingerStatus.STRAIGHT
+        elif angle_degrees > 90:  # 可根据实际情况调整阈值
+            return FingerStatus.BENT
+        else:
+            return FingerStatus.OTHER
 
 def main():
     cap = cv2.VideoCapture(0)

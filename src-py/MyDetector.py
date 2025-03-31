@@ -3,6 +3,7 @@ import time
 import traceback
 from typing import List
 
+import math
 import cv2
 import numpy as np
 import pyautogui
@@ -12,6 +13,13 @@ from pynput.mouse import Button, Controller
 from win10toast import ToastNotifier
 
 from HandTrackingModule import HandDetector
+from HandTrackingModule import FingerStatus
+from state_machine import StateMachine
+import DrawInScreen
+
+import logging
+from tkinter import messagebox
+
 
 screen_width, screen_height = pyautogui.size()
 mouse = Controller()
@@ -85,6 +93,19 @@ class MyDetector(HandDetector):
 
     flag_detect = True
     voice_controller = None
+    
+    state_change_time = time.time()
+
+    movestate_index_tip_pixels = []# the pixels in the start of move state
+    movestate_hand_type = None # the type of hand in move state
+    movestate_sensitivity = 1500# 鼠标灵敏度
+    movestate_threshold = 0.02# 移动阈值
+    movestate_thread = None# the thread of move state
+    movestate_last_move_x = 0
+    movestate_last_move_y = 0
+    movestate_move_change_threshold = 0.02
+    movestate_move_change_ratio = 0.2
+
 
     def __init__(self, mode=False, maxHands=2, detectionCon=0.5, minTrackCon=0.5):
         super().__init__(mode, maxHands, detectionCon, minTrackCon)
@@ -102,184 +123,46 @@ class MyDetector(HandDetector):
         thread = threading.Thread(target=init_voice_controller, daemon=True)
         thread.start()
 
-    def get_hand_state(self, hand):
-        fingers = self.fingersUp(hand)
-        # print(fingers)
-
-        # 0,1,2,3,4 分别代表 大拇指，食指，中指，无名指，小拇指
-        if fingers == [0, 1, 0, 0, 0]:
-            return HandState.only_index_up
-        elif fingers == [0, 1, 1, 0, 0]:
-            return HandState.index_and_middle_up
-        elif fingers == [0, 1, 1, 1, 0]:
-            return HandState.three_fingers_up
-        elif fingers == [0, 1, 1, 1, 1]:
-            return HandState.four_fingers_up
-        elif fingers == [1, 1, 1, 1, 1]:
-            return HandState.stop_gesture
-        elif fingers == [1, 0, 0, 0, 1]:
-            return HandState.voice_gesture_start
-        elif fingers == [0, 0, 0, 0, 0]:
-            return HandState.voice_gesture_stop
-        # 拇指在左边，其他全收起 手势判断
-        elif (hand['lmList'][4][0] > (hand['lmList'][8][0] + 20)
-              and hand['lmList'][4][0] > (hand['lmList'][12][0] + 20)
-              and hand['lmList'][4][0] > (hand['lmList'][16][0] + 20)
-              and hand['lmList'][4][0] > (hand['lmList'][20][0] + 20)
-              and fingers == [1, 0, 0, 0, 0]):
-            return HandState.delete_gesture
-        else:
-            return HandState.other
-
+        # 初始化状态机
+        self.init_state_machine()
     def draw_mouse_move_box(self, img) -> np.ndarray:
         cv2.rectangle(img, (frameR, frameR), (wCam - frameR, hCam - frameR),
                       (255, 0, 255), 2)
         return img
 
+    # 配置日志
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    
     def process(self, all_hands: List[dict]):
-        global prev_loc_x, prev_loc_y, prev_scroll_y
+        # 处理当前状态
+        self.state_machine.process_current_state(all_hands)
 
-        # 没有手
-        if len(all_hands) <= 0:
-            return
+        # current_state = self.state_machine.get[_current_state()
+        # logging.info(f"当前状态: {current_state}")
 
-        # 暂停识别
-        if len(all_hands) == 2:
-            right_hand = all_hands[0]
-            left_hand = all_hands[1]
+        # hand_count = len(all_hands)
+        # if hand_count == 0:
+        #     state_msg = '未检测到手势'
+        #     finger_status_list = []
+        # elif hand_count == 1:
+        #     right_hand = all_hands[0]
+        #     finger_status_list = self.get_all_fingers_status(right_hand)
+        #     state_msg = f'检测到 1 只手，手指状态列表: {finger_status_list}'
+        # elif hand_count == 2:
+        #     right_hand = all_hands[0]
+        #     left_hand = all_hands[1]
+        #     right_finger_status_list = self.get_all_fingers_status(right_hand)
+        #     left_finger_status_list = self.get_all_fingers_status(left_hand)
+        #     finger_status_list = [right_finger_status_list, left_finger_status_list]
+        #     state_msg = f'检测到 2 只手，右手手指状态列表: {right_finger_status_list}，左手手指状态列表: {left_finger_status_list}'
+        # else:
+        #     return
 
-            # 两只手的类型相同, 不处理
-            if right_hand['type'] == left_hand['type']:
-                return
+        # 使用 logging 输出信息到控制台
+        # logging.info(state_msg)
 
-            right_hand_state = self.get_hand_state(right_hand)
-            left_hand_state = self.get_hand_state(left_hand)
-
-            # 暂停/开始 识别
-            if right_hand_state == HandState.stop_gesture and left_hand_state == HandState.stop_gesture:
-                current_time = time.time()
-                if not current_time - self.last_change_flag_time > 1.5:
-                    return
-
-                self.flag_detect = not self.flag_detect
-
-                show_toast(
-                    msg='继续手势识别' if self.flag_detect else '暂停手势识别',
-                    duration=1
-                )
-                self.last_change_flag_time = current_time
-
-        if not self.flag_detect:
-            return
-
-        # 只有一只手
-        if len(all_hands) >= 1:
-            if len(all_hands) == 1:
-                right_hand = all_hands[0]
-            else:
-                right_hand = all_hands[0] if all_hands[0]['type'] == 'Right' else all_hands[1]
-
-            lmList, bbox = right_hand['lmList'], right_hand['bbox']
-            hand_state = self.get_hand_state(right_hand)
-
-            x1, y1 = lmList[8][:-1]  # 食指指尖坐标
-            x2, y2 = lmList[12][:-1]  # 中指指尖坐标
-            # print(x1, y1, x2, y2)
-
-            # 食指举起，移动鼠标
-            if hand_state == HandState.only_index_up:
-                # 步骤5: 坐标转换（摄像头坐标系转屏幕坐标系）
-                x3 = np.interp(x1, (frameR, wCam - frameR), (0, screen_width))
-                y3 = np.interp(y1, (frameR, hCam - frameR), (0, screen_height))
-
-                # 步骤6: 平滑处理
-                clocX = prev_loc_x + (x3 - prev_loc_x) / smoothening
-                clocY = prev_loc_y + (y3 - prev_loc_y) / smoothening
-
-                # 步骤7: 移动鼠标
-                # print(screen_width - clocX, clocY)
-                mouse.position = (screen_width - clocX, clocY)
-                # mouse.position = (screen_width - (clocX * 1.1), clocY * 1.1) # *1.1 优化移动速度
-
-                prev_loc_x, prev_loc_y = clocX, clocY
-
-                # 更新最后移动时间, 防止误触
-                self.last_move_time = time.time()
-
-            # 食指举起，中指举起
-            elif hand_state == HandState.index_and_middle_up:
-                if self.is_false_touch():
-                    return
-
-                length, info = self.findDistance((x1, y1), (x2, y2))
-
-                if length < 15:
-                    current_time = time.time()
-                    if not current_time - self.last_click_time > 0.5:  # 点击间隔 0.5s
-                        return
-
-                    mouse.click(Button.left, 1)
-                    # print(length)
-                    self.last_click_time = current_time
-
-            # 三根手指同时竖起 - 滚动屏幕
-            elif hand_state == HandState.three_fingers_up:
-                if self.is_false_touch():
-                    return
-
-                y3 = np.interp(y1, (frameR, hCam - frameR), (0, screen_height))
-
-                clocY = prev_scroll_y + (y3 - prev_scroll_y) / smoothening
-
-                if abs(y3 - clocY) < 60:  # 防止手抖
-                    return
-                # print(clocY, prev_scroll_y)
-
-                current_time = time.time()
-                if current_time - self.last_scroll_time > 0.3:  # 滚动间隔 0.3s
-                    if clocY > prev_scroll_y:
-                        mouse.scroll(0, scroll_increment)
-                    elif clocY < prev_scroll_y:
-                        mouse.scroll(0, -scroll_increment)
-
-                    self.last_scroll_time = current_time
-                    prev_scroll_y = clocY
-
-            # 四根手指同时竖起 - 视频全屏
-            elif hand_state == HandState.four_fingers_up:
-                self._four_fingers_up_trigger()
-
-            # 拇指和食指同时竖起 - 语音识别
-            elif hand_state == HandState.voice_gesture_start:
-                if not self.voice_controller:
-                    return
-
-                if not self.voice_controller.is_recording:
-                    self.voice_controller.start_record_thread()
-                    show_toast(
-                        title='开始语音识别',
-                        msg='开始语音识别',
-                        duration=1
-                    )
-            elif hand_state == HandState.voice_gesture_stop:
-                if not self.voice_controller:
-                    return
-
-                if self.voice_controller.is_recording:
-                    self.voice_controller.stop_record()
-                    show_toast(
-                        title='结束语音识别',
-                        msg='结束语音识别',
-                        duration=1
-                    )
-
-                    text = self.voice_controller.transcribe_audio()
-                    # 将文本输入到当前焦点的应用程序
-                    if text:
-                        keyboard.type(text)
-                        keyboard.tap(Key.enter)
-            elif hand_state == HandState.delete_gesture:
-                keyboard.tap(Key.backspace)
+        # 使用 tkinter 消息框显示信息
+        # messagebox.showinfo('手势状态', state_msg)
 
     def _four_fingers_up_trigger(self):
         if self.is_false_touch():
@@ -301,3 +184,101 @@ class MyDetector(HandDetector):
         if current_time - self.last_move_time < 0.2:  # 防止误触, 移动鼠标后立即点击
             return True
         return False
+
+    def init_state_machine(self):
+        self.state_machine = StateMachine("normal")
+
+        # 添加状态及处理函数
+        def process_normal(all_hands):
+            if all_hands:
+                for hand in all_hands:
+                    finger_status = self.get_all_fingers_status(hand)
+                    if finger_status[1::] == [1, 1, 1, 1] or finger_status == [0, 1, 1, 1, 1] and self.detect_single_finger_state(hand["lmList"], 1) == FingerStatus.STRAIGHT_UP:
+                        return "wait"
+            return "normal"
+
+        def process_move(all_hands):
+            # move mouse
+            if all_hands:
+                for hand in all_hands:
+                    if hand["type"] == self.movestate_hand_type:
+                        index_tip_pixels = self.get_index_tip_pixels(hand)
+                        if index_tip_pixels:
+                            relative_move_x = (index_tip_pixels[0] - self.movestate_index_tip_pixels[0] - self.movestate_last_move_x)
+                            relative_move_y = (index_tip_pixels[1] - self.movestate_index_tip_pixels[1] - self.movestate_last_move_y)
+                            relative_move_x=math.copysign(min(abs(relative_move_x)*self.movestate_move_change_ratio,self.movestate_move_change_threshold), relative_move_x)+self.movestate_last_move_x
+                            relative_move_y=math.copysign(min(abs(relative_move_y)*self.movestate_move_change_ratio,self.movestate_move_change_threshold), relative_move_y)+self.movestate_last_move_y
+
+                            self.movestate_last_move_x = relative_move_x
+                            self.movestate_last_move_y = relative_move_y
+                            # 绘制圆
+                            DrawInScreen.draw_cycle(True, self.movestate_threshold* self.movestate_sensitivity, -relative_move_x * self.movestate_sensitivity, relative_move_y* self.movestate_sensitivity)
+                            # 判断是否超过阈值
+                            relative_move_dis = (relative_move_x**2 + relative_move_y**2)**0.5
+                            if relative_move_dis > self.movestate_threshold:
+                                # 计算实际需要移动的距离
+                                scaling = (relative_move_dis-self.movestate_threshold)**2 / relative_move_dis #非线性提速
+                                move_x = relative_move_x * scaling
+                                move_y = relative_move_y * scaling
+                                if not hasattr(process_move, "sum_dy"):
+                                    process_move.sum_dy = 0  # 初始化静态变量global sum_dx=0
+                                if not hasattr(process_move, "sum_dx"):
+                                    process_move.sum_dx = 0  # 初始化静态变量global sum_dx=0
+                                sum_dx = process_move.sum_dx
+                                sum_dy = process_move.sum_dy
+                                sum_dx += -move_x * self.movestate_sensitivity
+                                sum_dy += move_y * self.movestate_sensitivity
+                                # 移动鼠标
+                                mouse.move(math.modf(sum_dx)[1], math.modf(sum_dy)[1])
+                                # 重置累积距离
+                                process_move.sum_dx = math.modf(sum_dx)[0]
+                                process_move.sum_dy = math.modf(sum_dy)[0]
+
+                                # 更新起始位置
+                                # self.movestate_index_tip_pixels = index_tip_pixels
+
+
+                                logging.info(f"process_move : {move_x} {move_y}")
+
+            # state change
+            if all_hands:
+                for hand in all_hands:
+                    finger_status = self.get_all_fingers_status(hand)
+                    if finger_status[1::] == [1, 1, 1, 1] or finger_status == [0, 1, 1, 1, 1] and self.detect_single_finger_state(hand["lmList"], 1) == FingerStatus.STRAIGHT_UP:
+                        return "wait"
+            return "move"
+        def enter_move(tip_pixels, hand_type):
+            self.movestate_index_tip_pixels = tip_pixels
+            self.movestate_hand_type = hand_type
+            self.movestate_last_move_x = 0
+            self.movestate_last_move_y = 0
+
+        def process_wait(all_hands):
+            if time.time() - self.state_change_time > 5:
+                return "normal"
+            if all_hands:
+                for hand in all_hands:
+                    finger_status = self.get_all_fingers_status(hand)
+                    if finger_status[1::] == [1, 0, 0, 0]and self.detect_single_finger_state(hand["lmList"], 1) == FingerStatus.STRAIGHT_UP:
+                        enter_move(self.get_index_tip_pixels(hand), hand["type"])
+                        logging.info(f"enter_move : {self.movestate_index_tip_pixels}")
+                        return "move"
+                    elif not self.is_false_touch() and finger_status[1::] == [0, 0, 0, 0]:
+                        current_time = time.time()
+                        if not current_time - self.last_click_time > 0.5:  # 点击间隔 0.5s
+                            return "normal"
+
+                        mouse.click(Button.left, 1)
+                        # print(length)
+                        self.last_click_time = current_time
+            return "wait"
+
+        def enter_wait(all_hands):
+            self.state_change_time = time.time()
+
+        
+        # def enter_move(all_hands):
+
+        self.state_machine.add_state("normal", process_normal)
+        self.state_machine.add_state("move", process_move)
+        self.state_machine.add_state("wait", process_wait, enter_wait)
