@@ -1,3 +1,41 @@
+# import win32gui
+# import win32con
+
+# # 定义消息处理函数
+# def WndProc(hwnd, msg, wParam, lParam):
+#     if msg == win32con.WM_DESTROY:
+#         win32gui.PostQuitMessage(0)
+#         return True
+#     return win32gui.DefWindowProc(hwnd, msg, wParam, lParam)
+
+# # 定义窗口类
+# class_name = "SimpleWindowClass"
+# window_title = "Simple Window"
+
+# # 注册窗口类
+# wc = win32gui.WNDCLASS()
+# wc.hbrBackground = win32gui.GetStockObject(win32con.WHITE_BRUSH)
+# wc.hCursor = win32gui.LoadCursor(0, win32con.IDC_ARROW)
+# wc.hIcon = win32gui.LoadIcon(0, win32con.IDI_APPLICATION)
+# wc.lpszClassName = class_name
+# wc.lpfnWndProc = WndProc  # 指定消息处理函数
+# class_atom = win32gui.RegisterClass(wc)
+
+# # 创建窗口
+# hwnd = win32gui.CreateWindow(
+#     class_atom,
+#     window_title,
+#     win32con.WS_OVERLAPPEDWINDOW,
+#     100, 100, 400, 300,
+#     0, 0, 0, None
+# )
+
+# # 显示窗口
+# win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
+# win32gui.UpdateWindow(hwnd)
+
+# # 消息循环
+# win32gui.PumpMessages()
 
 import threading
 from time import sleep
@@ -6,6 +44,27 @@ import win32con
 import win32api
 from win32con import WS_EX_LAYERED,WS_EX_TRANSPARENT,GWL_EXSTYLE,WS_EX_TOOLWINDOW,HWND_TOPMOST
 from win32api import SetWindowLong
+# 定义消息处理函数
+def WndProc(hwnd, msg, wParam, lParam):
+    if msg == win32con.WM_DESTROY:
+        print("WM_DESTROY")
+        win32gui.PostQuitMessage(0)
+        return 0
+    elif msg == win32con.WM_PAINT:
+        hdc, paintStruct = win32gui.BeginPaint(hwnd)
+        # 绘制矩形
+        win32gui.Rectangle(hdc, 50, 50, 200, 150)
+        
+        # 绘制圆形
+        win32gui.Ellipse(hdc, 250, 50, 350, 150)
+        
+        win32gui.EndPaint(hwnd, paintStruct)
+        
+        
+        return 0
+    return win32gui.DefWindowProc(hwnd, msg, wParam, lParam)
+
+
 class ScreenDrawer:
     def __init__(self):
         # 定义窗口和圆圈的属性
@@ -126,16 +185,11 @@ class ScreenDrawer:
         win32gui.UpdateWindow(self.big_hwnd)
         win32gui.UpdateWindow(self.small_hwnd)
 
-    def move_small_circle(self, relative_x, relative_y):
-        scale = self.big_circle_radius
-        # 归一化坐标转窗口中心像素坐标
-        cx = relative_x*scale + self.screen_center_x
-        cy = relative_y*scale + self.screen_center_y
-
-        # 计算窗口左上角的坐标
-        new_x = int(cx - self.small_window_width // 2)
-        new_y = int(cy - self.small_window_height // 2)
-        # print(f"移动窗口: x={new_x}, y={new_y}")
+    def move_small_circle(self, x, y):
+        # 移动窗口中心到指定位置
+        new_x = int(x - self.small_window_width // 2)
+        new_y = int(y - self.small_window_height // 2)
+        print(f"移动窗口: x={new_x}, y={new_y}")
         win32gui.PostMessage(self.small_hwnd, win32con.WM_MOVE, 0, (new_y << 16) | new_x)
 
 
@@ -148,26 +202,23 @@ class ScreenDrawer:
                     # 发送 WM_CLOSE 消息
                     win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
                     
-                    # print(f"WM_CLOSE 消息已发送到窗口句柄 {hwnd}")
+                    print(f"WM_CLOSE 消息已发送到窗口句柄 {hwnd}")
                 except Exception as e:
-                    # print(f"销毁窗口时出错: {e}")
-                    pass
+                    print(f"销毁窗口时出错: {e}")
             else:
-                # print("窗口不存在或已被销毁")
-                pass
-
+                print("窗口不存在或已被销毁")
     # 窗口过程函数
     def WndProc(self, hwnd, msg, wParam, lParam):
         if hwnd == self.big_hwnd:
-            # # print("big hwnd")
+            # print("big hwnd")
             return self.big_WndProc(hwnd, msg, wParam, lParam)
         elif hwnd == self.small_hwnd:
-            # # print("small hwnd")
+            # print("small hwnd")
             return self.small_WndProc(hwnd, msg, wParam, lParam)
     
     def small_WndProc(self, hwnd, msg, wParam, lParam):
         if msg == win32con.WM_DESTROY:
-            # print("small WM_DESTROY")
+            print("small WM_DESTROY")
             win32gui.PostQuitMessage(0)
             return 0
         elif msg == win32con.WM_PAINT:
@@ -176,17 +227,16 @@ class ScreenDrawer:
             if paint_area[2]>self.small_circle_radius*2 and paint_area[3]>self.small_circle_radius*2:
                 cx = paint_area[0]+paint_area[2]//2
                 cy = paint_area[1]+paint_area[3]//2
-                # print(f"绘制小圆: x={cx}, y={cy}, r={self.small_circle_radius}, color={self.small_circle_color}")
+                print(f"绘制小圆: x={cx}, y={cy}, r={self.small_circle_radius}, color={self.small_circle_color}")
                 self.draw_circle(hdc, cx, cy, self.small_circle_radius, self.small_circle_color)
             else:
-                # print("不绘制小圆")
-                pass
+                print("不绘制小圆")
             win32gui.EndPaint(hwnd, paintStruct)
             
             
             return 0
         # elif msg == 20:
-        #     # print("拦截一条消息{}",msg)
+        #     print("拦截一条消息{}",msg)
         #     return 0
         elif msg == win32con.WM_MOVE:
             # 获取新的位置
@@ -205,27 +255,26 @@ class ScreenDrawer:
 
     def big_WndProc(self, hwnd, msg, wParam, lParam):
         if msg == win32con.WM_DESTROY:
-            # print("big WM_DESTROY")
+            print("big WM_DESTROY")
             win32gui.PostQuitMessage(0)
             return 0
         elif msg == win32con.WM_PAINT:
-            # print("big WM_PAINT")
+            print("big WM_PAINT")
             hdc, paintStruct = win32gui.BeginPaint(hwnd)
             paint_area = paintStruct[2]
             if paint_area[2]>self.big_circle_radius*2 and paint_area[3]>self.big_circle_radius*2:
                 cx = paint_area[0]+paint_area[2]//2
                 cy = paint_area[1]+paint_area[3]//2
-                # print(f"绘制大圆: x={cx}, y={cy}, r={self.big_circle_radius}, color={self.big_circle_color}")
+                print(f"绘制大圆: x={cx}, y={cy}, r={self.big_circle_radius}, color={self.big_circle_color}")
                 self.draw_circle(hdc, cx, cy, self.big_circle_radius, self.big_circle_color)
             else:
-                # print("不绘制大圆")
-                pass
+                print("不绘制大圆")
             win32gui.EndPaint(hwnd, paintStruct)
             
             
             return 0
         # elif msg == 20:
-        #     # print("拦截一条消息{}",msg)
+        #     print("拦截一条消息{}",msg)
         #     return 0
         return win32gui.DefWindowProc(hwnd, msg, wParam, lParam)
     
@@ -258,13 +307,13 @@ class ScreenDrawer:
             ]
             for px, py in points:
                 try:
-                    # # print(f"绘制像素: ({px}, {py})")
+                    # print(f"绘制像素: ({px}, {py})")
                     win32gui.SetPixel(dc, px, py, color)
                 except Exception as e:
                     
-                    # print(f"绘制像素时出错: {e}")
+                    print(f"绘制像素时出错: {e}")
                     return
-                    # # print(f"坐标: ({px}, {py})")
+                    # print(f"坐标: ({px}, {py})")
                     
             if d < 0:
                 d += 4 * x0 + 6
@@ -273,7 +322,70 @@ class ScreenDrawer:
                 y0 -= 1
             x0 += 1
 
+    # def get_window_size(self,hwnd):
+    #     # 获取窗口的客户区大小
+    #     rect = win32gui.GetClientRect(hwnd)  # 获取窗口客户区的矩形
+    #     if rect:
+    #         left, top, right, bottom = rect
+    #         width = right - left
+    #         height = bottom - top
+    #         self.window_width = width
+    #         self.window_height = height
+    #     else:
+    #         print("无法获取窗口客户区的矩形")
+    #         return False
+        
+    #     # 获取窗口的大小
+    #     window_rect = win32gui.GetWindowRect(hwnd)  # 获取窗口的矩形
+    #     if window_rect:
+    #         left, top, right, bottom = window_rect
+    #         width = right - left
+    #         height = bottom - top
+    #         self.window_width = width
+    #         self.window_height = height
+    #     else:
+    #         print("无法获取窗口的矩形")
+    #         return False
+    #     return True
+    # color_state = True
+    # def draw_all_circle(self, dc, is_init, big_r, small_x_offset, small_y_offset, small_r=5):
+    #     # 显示窗口
+    #     # win32gui.ShowWindow(self.hwnd, win32con.SW_SHOW)
+    #     # win32gui.UpdateWindow(self.hwnd)
+    #     # # 获取窗口的设备上下文
+    #     # self.dc = win32gui.GetWindowDC(self.hwnd)
 
+    #     # 定义颜色
+    #     red = win32api.RGB(255, 0, 0)  # 大圆颜色
+    #     blue = win32api.RGB(0, 0, 255)  # 小圆颜色
+    #     if self.color_state:
+    #         color = red
+    #         self.color_state = False
+    #     else:
+    #         color = blue
+    #         self.color_state = True
+
+    #     if is_init:
+    #         # 初始化时绘制大圆
+    #         center_x = self.window_width // 2
+    #         center_y = self.window_height // 2
+    #         print(f"绘制大圆: x={center_x}, y={center_y}, r={self.big_radius}")
+    #         self.draw_circle(dc, center_x, center_y, self.big_radius, color)
+    #         self.big_circle_drawn = True
+
+    #     center_x = self.window_width // 2
+    #     center_y = self.window_height // 2
+
+    #     # 计算小圆的实际坐标
+    #     scaling = self.big_radius / big_r
+    #     small_x = round(center_x + small_x_offset * scaling)
+    #     small_y = round(center_y + small_y_offset * scaling)
+    #     small_r = int(small_r)
+
+    #     # 绘制小圆
+    #     print(f"绘制小圆: x={small_x}, y={small_y}, r={small_r}")
+    #     self.draw_circle(dc, small_x, small_y, small_r, color)
+     
 import queue
 
 def draw_circle(q):
@@ -306,3 +418,60 @@ def init_drawcircle_thread():
     else:
         print("thread init failed")
         return None
+
+# 使用示例
+if __name__ == "__main__":
+    # drawer = ScreenDrawer()
+    # hwnd =  None
+    # print(1)
+    
+    # drawer.show()
+    # print(2)
+    # # 消息循环
+    # t_init = threading.Thread(target=win32gui.PumpMessages, daemon=True)
+    # t_init.start()
+    # q = queue.Queue()
+    # # 修改部分
+    # t_init = threading.Thread(target=draw_circle,args=(q,))
+    # # 将线程设置为守护线程
+    # t_init.daemon = True
+    # t_init.start()
+
+    # print("waiting...")
+    # sleep(1)
+    # while True:
+    #     tem = q.get()
+    #     if tem is None:
+    #         break
+    #     drawer = tem
+    #     # print(hwnd)
+    #     q.task_done()
+    
+    # 
+    # drawer.__del__()
+    # sleep(1)
+
+    drawer, t_init = init_drawcircle_thread()
+    print("show window")
+    drawer.show()
+    sleep(5)
+    print("hide window")
+    drawer.hide()
+    sleep(5)
+    print("show window")
+    drawer.show()
+    sleep(2)
+
+    drawer.move_small_circle(100,100)
+    sleep(5)
+    drawer.move_small_circle(200,200)
+    sleep(5)
+    print("close window")
+    
+    drawer.close_window()
+
+    # 等待线程结束
+    print("等待线程结束")
+    t_init.join()
+
+    print("程序结束")
