@@ -152,6 +152,7 @@ def shutdown():
 
     import signal
     import os
+    # 向当前进程发送 SIGINT 信号，终止进程
     os.kill(os.getpid(), signal.SIGINT)
 
 

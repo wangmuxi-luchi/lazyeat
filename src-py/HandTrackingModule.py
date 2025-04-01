@@ -183,6 +183,18 @@ class HandDetector:
                 else:
                     fingers.append(0)
         return fingers
+    
+    def cal_3Ddistance(self, p1, p2):
+        """
+        计算三维距离
+        :param p1: Point1
+        :param p2: Point2
+        :return: 返回三维距离
+        """
+        x1, y1, z1 = p1
+        x2, y2, z2 = p2
+        return math.hypot(x2 - x1, y2 - y1, z2 - z1)
+
 
     def findDistance(self, p1, p2, img=None):
         """
@@ -220,7 +232,7 @@ class HandDetector:
         tip_id = self.tipIds[finger_id]
         if finger_id == 0:  # 大拇指
             joint1_point1 = myLmList[0][:2]
-            joint1_point2 = myLmList[tip_id - 3][:2]
+            joint1_point2 = myLmList[tip_id - 2][:2]
             joint2_point1 = myLmList[tip_id - 1][:2]
             joint2_point2 = myLmList[tip_id][:2]
             # base_id = tip_id - 2
@@ -228,8 +240,8 @@ class HandDetector:
         else:
             joint1_point1 = myLmList[0][:2]
             joint1_point2 = myLmList[tip_id - 3][:2]
-            joint2_point1 = myLmList[tip_id - 3][:2]
-            joint2_point2 = myLmList[tip_id - 2][:2]
+            joint2_point1 = myLmList[tip_id - 1][:2]
+            joint2_point2 = myLmList[tip_id][:2]
             # base_id = 0
             # root_id = tip_id - 3
             # base_id = tip_id - 3
@@ -271,7 +283,7 @@ class HandDetector:
 
         # 根据角度判断手指状态
         # return angle_degrees
-        if angle_degrees < 25:  # 可根据实际情况调整阈值
+        if angle_degrees < 50:  # 可根据实际情况调整阈值
             return 1  # 手指伸直
         else:
             return 0  # 手指弯曲
@@ -286,12 +298,7 @@ class HandDetector:
         myLmList = myHand["lmList"]
         fingers_status = []
 
-        # 处理大拇指
-        thumb_status = self.get_finger_status(myLmList, 0)
-        fingers_status.append(thumb_status)
-
-        # 处理其他四根手指
-        for finger_id in range(1, 5):
+        for finger_id in range(0, 5):
             finger_status = self.get_finger_status(myLmList, finger_id)
             fingers_status.append(finger_status)
 
@@ -301,19 +308,27 @@ class HandDetector:
         return fingers_status
 
 
-    def get_index_tip_pixels(self, myHand):
+    def get_pixels(self, myHand, index_tip_id = -1, normalized = True, is_3D = False):
         """
         获取食指指尖的像素坐标归一化。
         :param myHand: 包含手部信息的字典，如关键点坐标、手部类型等
         :return: 食指指尖的像素坐标归一化 (x, y)
         """
         myLmList = myHand["lmList"]
-        index_tip_id = self.tipIds[1]  # 食指指尖的关键点索引
-        index_tip_pixels = myLmList[index_tip_id][:2]  # 获取前两个元素，即 x 和 y 坐标
+        if index_tip_id == -1:
+            index_tip_id = self.tipIds[1]  # 食指指尖的关键点索引
+        index_tip_pixels = myLmList[index_tip_id][:3]  # 获取前两个元素，即 x 和 y 坐标
 
+        normalized_x = index_tip_pixels[0]
+        normalized_y = index_tip_pixels[1]
+        normalized_z = index_tip_pixels[2]
         # 归一化
-        normalized_x = index_tip_pixels[0] / self.img_width
-        normalized_y = index_tip_pixels[1] / self.img_height
+        if normalized:
+            normalized_x = normalized_x / self.img_width
+            normalized_y = normalized_y / self.img_height
+            normalized_z = normalized_z / self.img_width
+        if is_3D:
+            return normalized_x, normalized_y, normalized_z
         return normalized_x, normalized_y
     
     def detect_single_finger_state(self, myLmList, finger_id):
