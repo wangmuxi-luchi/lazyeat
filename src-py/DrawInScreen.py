@@ -41,7 +41,7 @@ class ScreenDrawer:
         
     def init_window(self):
         # 定义窗口类
-        class_name = "big_circle_window"
+        class_name = "small_circle_window"
         # 注册窗口类
         wc = win32gui.WNDCLASS()
         wc.hbrBackground = win32gui.GetStockObject(win32con.HOLLOW_BRUSH)
@@ -51,6 +51,29 @@ class ScreenDrawer:
         wc.lpfnWndProc = self.WndProc  # 指定消息处理函数
         class_atom = win32gui.RegisterClass(wc)
 
+        cx = self.screen_center_x+self.small_circle_rx - self.small_window_width // 2
+        cy = self.screen_center_y+self.small_circle_ry - self.small_window_height // 2
+        
+        window_title = "Small Window"
+        self.small_hwnd = win32gui.CreateWindow(
+            class_atom,
+            window_title,
+            win32con.WS_POPUP,
+            cx, cy, self.small_window_width, self.small_window_height,
+            0, 0, 0, None
+        )
+
+        # 定义窗口类
+        class_name = "big_circle_window"
+        # 注册窗口类
+        # wc = win32gui.WNDCLASS()
+        # wc.hbrBackground = win32gui.GetStockObject(win32con.WHITE_BRUSH)
+        # wc.hCursor = win32gui.LoadCursor(0, win32con.IDC_ARROW)
+        # wc.hIcon = win32gui.LoadIcon(0, win32con.IDI_APPLICATION)
+        # wc.lpfnWndProc = self.WndProc  # 指定消息处理函数
+        wc.lpszClassName = class_name
+        class_atom = win32gui.RegisterClass(wc)
+        
         # 计算窗口左上角的坐标，使其位于屏幕中心
         center_x = self.screen_center_x - self.big_window_width // 2
         center_y = self.screen_center_y - self.big_window_height // 2
@@ -62,28 +85,6 @@ class ScreenDrawer:
             window_title,
             win32con.WS_POPUP, 
             center_x, center_y, self.big_window_width, self.big_window_height,
-            0, 0, 0, None
-        )
-        
-        # 定义窗口类
-        class_name = "small_circle_window"
-        # 注册窗口类
-        # wc = win32gui.WNDCLASS()
-        # wc.hbrBackground = win32gui.GetStockObject(win32con.WHITE_BRUSH)
-        # wc.hCursor = win32gui.LoadCursor(0, win32con.IDC_ARROW)
-        # wc.hIcon = win32gui.LoadIcon(0, win32con.IDI_APPLICATION)
-        # wc.lpfnWndProc = self.WndProc  # 指定消息处理函数
-        wc.lpszClassName = class_name
-        class_atom = win32gui.RegisterClass(wc)
-        window_title = "Small Window"
-        
-        cx = self.screen_center_x+self.small_circle_rx - self.small_window_width // 2
-        cy = self.screen_center_y+self.small_circle_ry - self.small_window_height // 2
-        self.small_hwnd = win32gui.CreateWindow(
-            class_atom,
-            window_title,
-            win32con.WS_POPUP,
-            cx, cy, self.small_window_width, self.small_window_height,
             0, 0, 0, None
         )
 
@@ -100,8 +101,14 @@ class ScreenDrawer:
                 win32con.SWP_NOMOVE | win32con.SWP_NOSIZE  # 不移动、不改变大小
             )
 
-        # 显示窗口
-        self.show()
+        # 初始化窗口
+        for hwnd in [self.big_hwnd, self.small_hwnd]:
+            if hwnd:
+                win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
+        self.setWinThrowON()
+        self.hide()
+
+
 
     def show(self):
         # 显示窗口
@@ -117,14 +124,14 @@ class ScreenDrawer:
         # win32gui.UpdateWindow(self.small_hwnd)
 
         
-        self.setWinThrowON()
+        # self.setWinThrowON()
 
     def hide(self):
         # 隐藏窗口
-        win32gui.ShowWindow(self.big_hwnd, win32con.SW_HIDE)
-        win32gui.ShowWindow(self.small_hwnd, win32con.SW_HIDE)
-        win32gui.UpdateWindow(self.big_hwnd)
-        win32gui.UpdateWindow(self.small_hwnd)
+        for hwnd in [self.big_hwnd, self.small_hwnd]:
+            if hwnd:
+                win32gui.ShowWindow(hwnd, win32con.SW_HIDE)
+                win32gui.UpdateWindow(hwnd)
 
     def move_small_circle(self, relative_x, relative_y):
         scale = self.big_circle_radius
@@ -229,9 +236,9 @@ class ScreenDrawer:
         #     return 0
         return win32gui.DefWindowProc(hwnd, msg, wParam, lParam)
     
-    # 设置点击穿透
+    # 设置点击穿透，不显示任务栏图标
     def setWinThrowON(self):
-        exStyle = WS_EX_LAYERED | WS_EX_TRANSPARENT# | WS_EX_TOOLWINDOW
+        exStyle = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW
         for hwnd in [self.big_hwnd, self.small_hwnd]:
             if hwnd:
                 SetWindowLong(hwnd, GWL_EXSTYLE,exStyle)
@@ -306,3 +313,10 @@ def init_drawcircle_thread():
     else:
         print("thread init failed")
         return None
+    
+if __name__ == "__main__":
+    drawer, draw_circle_thread = init_drawcircle_thread()
+    sleep(10)
+    drawer.show()
+    drawer.move_small_circle(0.5,0.5)
+    sleep(10)
