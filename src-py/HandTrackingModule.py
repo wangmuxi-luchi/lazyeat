@@ -307,31 +307,56 @@ class HandDetector:
 
         return fingers_status
 
-
-    def get_pixels(self, myHand, index_tip_id = -1, normalized = True, is_3D = False):
+    def cal_palm_width(self, myHand):
         """
-        获取食指指尖的像素坐标归一化。
+        计算手掌宽度。
         :param myHand: 包含手部信息的字典，如关键点坐标、手部类型等
+        :return: 手掌宽度
+        """
+        myLmList = myHand["lmList"]
+        # 计算手掌宽度
+        second_finger_idx = self.tipIds[1] - 3# 食指指尖的关键点索引
+        last_finger_idx = self.tipIds[4] - 3# 食指指尖的关键点索引
+        second_finger_pos = myLmList[second_finger_idx]  # 中指
+        last_finger_pos = myLmList[last_finger_idx]  # 小指
+        delt_x = second_finger_pos[0] - last_finger_pos[0]
+        delt_y = second_finger_pos[1] - last_finger_pos[1]
+        delt_z = second_finger_pos[2] - last_finger_pos[2]
+        palm_width = math.sqrt(delt_x**2 + delt_y**2 + delt_z**2)
+        return palm_width
+
+    def get_pixels(self, myHand, finger = -1,offset = 0, normalized = True, is_3D = False):
+        """
+        获取手指坐标归一化。
+        :param myHand: 包含手部信息的字典，如关键点坐标、手部类型等
+        :param finger: 手指，默认为食指，0代表拇指，1代表食指，2代表中指，3代表无名指，4代表小指
+        :param offset: 偏移量，默认为 0 代表指尖，每加一代表下一个关节点
+        :param normalized: 是否归一化，默认为 True
+        :param is_3D: 是否返回三维坐标，默认为 False
         :return: 食指指尖的像素坐标归一化 (x, y)
         """
         myLmList = myHand["lmList"]
-        if index_tip_id == -1:
-            index_tip_id = self.tipIds[1]  # 食指指尖的关键点索引
-        index_tip_pixels = myLmList[index_tip_id][:3]  # 获取前两个元素，即 x 和 y 坐标
+        if finger == -1:
+            point_index = self.tipIds[1] - offset # 食指指尖的关键点索引
+        else:
+            point_index = self.tipIds[finger] - offset  # 食指指尖的关键点索引
+        point_pixels = myLmList[point_index][:3]  # 获取坐标
 
-        normalized_x = index_tip_pixels[0]
-        normalized_y = index_tip_pixels[1]
-        normalized_z = index_tip_pixels[2]
+        normalized_x = point_pixels[0]
+        normalized_y = point_pixels[1]
+        normalized_z = point_pixels[2]
         # 归一化
         if normalized:
-            normalized_x = normalized_x / self.img_width
-            normalized_y = normalized_y / self.img_height
-            normalized_z = normalized_z / self.img_width
+            # 计算手掌宽度
+            palm_width = self.cal_palm_width(myHand)
+            normalized_x = normalized_x / palm_width
+            normalized_y = normalized_y / palm_width
+            normalized_z = normalized_z / palm_width
         if is_3D:
             return normalized_x, normalized_y, normalized_z
         return normalized_x, normalized_y
     
-    def detect_single_finger_state(self, myLmList, finger_id):
+    def detect_single_finger_state(self, hand, finger_id):
         """
         检测单个手指的状态。
 
@@ -339,7 +364,8 @@ class HandDetector:
         :param finger_id: 手指的 ID（0 为大拇指，1 为食指，依此类推）
         :return: 手指的状态，使用 FingerStatus 枚举表示
         """
-        # 获取手指相关的关键点索引
+        myLmList = hand["lmList"]
+        # 获取手指关键点索引
         tip_id = self.tipIds[finger_id]
         if finger_id == 0:  # 大拇指
             base_id = tip_id - 1

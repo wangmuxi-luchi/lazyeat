@@ -110,14 +110,18 @@ class MyDetector(HandDetector):
 
     wrong_hand_count = 0
 
+    last_left_state_change_time = 0
+    last_right_state_change_time = 0
     # movestate_start_center = []# the pixels in the start of move state
     # movestate_dyn_cx = 0 # the x coordinate of the center of the hand in move state
     # movestate_dyn_cy = 0 # the y coordinate of the center of the hand in move state
     state_hand_type = None # the type of hand in move state
-    move_sensitivity = 1500# 鼠标灵敏度
-    scroll_sensitivity = 30# 滚动灵敏度
-    mouse_threshold = 0.12 # 摇杆移动阈值
+    move_sensitivity = 300# 鼠标灵敏度
+    scroll_sensitivity = 10# 滚动灵敏度
+    mouse_threshold = 0.5 # 摇杆移动阈值
     movestate_base_finger = 1 # 移动基于哪根手指指尖，1代表食指，2代表中指，3代表无名指，4代表小拇指
+
+
 
     # movestate_move_change_threshold = 0.02
     # movestate_move_change_ratio = 0.2
@@ -151,6 +155,15 @@ class MyDetector(HandDetector):
 
     def get_hand_state(self, hand):
         fingers = self.get_all_fingers_status(hand)
+        second_finger_pos = self.get_pixels(hand, 1, 3)
+        last_finger_pos = self.get_pixels(hand, 4, 3)
+        delt_x = second_finger_pos[0] - last_finger_pos[0]
+        if hand['type'] == 'Left' and delt_x > -0.6:
+            # logging.info(f"left hand delt_x: {delt_x}")
+            return HandState.other
+        if hand['type'] == 'Right' and delt_x < 0.6:
+            # logging.info(f"right hand delt_x: {delt_x}")
+            return HandState.other
         # print(fingers)
 
         # 0,1,2,3,4 分别代表 大拇指，食指，中指，无名指，小拇指
@@ -199,8 +212,33 @@ class MyDetector(HandDetector):
             hand_state = self.get_hand_state(hand)
             if hand['type'] == 'Left':
                 self.cur_left_hand_state = hand_state
+                if self.cur_left_hand_state != self.pre_left_hand_state:
+                    self.last_change_flag_time = time.time()
+
+                # second_finger_pos = self.get_pixels(hand, 1, 3, is_3D=True)
+                # last_finger_pos = self.get_pixels(hand, 4, 3, is_3D=True)
+                # delt_x = second_finger_pos[0] - last_finger_pos[0]
+                # delt_y = second_finger_pos[1] - last_finger_pos[1]
+                # delt_z = second_finger_pos[2] - last_finger_pos[2]
+                # dis = math.sqrt(delt_x**2 + delt_y**2 + delt_z**2)
+                # # logging.info(f"左手状态: {hand_state} 第二根手指位置: {second_finger_pos} 第五根手指位置: {last_finger_pos}")
+                # logging.info(f"左手状态: {hand_state} 距离: {delt_x}")
             else:
                 self.cur_right_hand_state = hand_state
+                if self.cur_right_hand_state!= self.pre_right_hand_state:
+                    self.last_right_state_change_time = time.time()
+
+                # second_finger_pos = self.get_pixels(hand, 1, 3, is_3D=True)
+                # last_finger_pos = self.get_pixels(hand, 4, 3, is_3D=True)
+                # delt_x = second_finger_pos[0] - last_finger_pos[0]
+                # delt_y = second_finger_pos[1] - last_finger_pos[1]
+                # delt_z = second_finger_pos[2] - last_finger_pos[2]
+                # dis = math.sqrt(delt_x**2 + delt_y**2 + delt_z**2)
+                # # logging.info(f"右手状态: {hand_state} 第二根手指位置: {second_finger_pos} 第五根手指位置: {last_finger_pos}")
+                # logging.info(f"右手状态: {hand_state} 距离: {delt_x}")
+                # # logging.info(f"右手状态: {hand_state}")
+                
+        # return
         self.state_machine.process_current_state(all_hands)
 
         # current_state = self.state_machine.get[_current_state()
@@ -319,7 +357,7 @@ class MyDetector(HandDetector):
             if len(all_hands) > 0:
                 for hand in all_hands:
                     if hand["type"] == self.state_hand_type:
-                        index_tip_pixels = self.get_pixels(hand, 8) # 食指指尖
+                        index_tip_pixels = self.get_pixels(hand, 1) # 食指指尖
                         if index_tip_pixels:
                             move_x,move_y = self.mouse_joystick.calculate_movement(index_tip_pixels[0], index_tip_pixels[1])
                             # 计算相对位置
@@ -336,7 +374,7 @@ class MyDetector(HandDetector):
             if all_hands:
                 for hand in all_hands:
                     finger_status = self.get_all_fingers_status(hand)
-                    if finger_status[1::] == [1, 1, 1, 1] or finger_status == [0, 1, 1, 1, 1] and self.detect_single_finger_state(hand["lmList"], 1) == FingerStatus.STRAIGHT_UP:
+                    if finger_status[1::] == [1, 1, 1, 1] or finger_status == [0, 1, 1, 1, 1] and self.detect_single_finger_state(hand, 1) == FingerStatus.STRAIGHT_UP:
                         return "wait",(hand["type"],)
             return "move"
         def enter_move(tip_pixels=None, hand_type=None, base_finger=1):
@@ -370,7 +408,7 @@ class MyDetector(HandDetector):
             if len(all_hands) > 0:
                 for hand in all_hands:
                     if hand["type"] == self.state_hand_type:
-                        index_tip_pixels = self.get_pixels(hand, 8) # 食指指尖
+                        index_tip_pixels = self.get_pixels(hand, 1) # 食指指尖
                         if index_tip_pixels:
                             scroll_x,scroll_y = self.mouse_joystick.calculate_movement(index_tip_pixels[0], index_tip_pixels[1])
                             # 计算相对位置
@@ -415,30 +453,33 @@ class MyDetector(HandDetector):
                 return "normal"
             if all_hands:
                 for hand in all_hands:
-                    # 在看不到手掌时左右手判断经常出错，无后续响应，因此暂时取消这个判断
-                    # if hand["type"] != self.state_hand_type:
-                    #     continue
-                    # finger_status = self.get_all_fingers_status(hand)
-                    # if finger_status[1::] == [1, 0, 0, 0]and self.detect_single_finger_state(hand["lmList"], 1) == FingerStatus.STRAIGHT_UP:
-                    #     # enter_move(self.get_pixels(hand), hand["type"])
-                    #     # logging.info(f"enter_move : ")
-                    #     return "move",(self.get_pixels(hand),hand["type"])
-                    
-                    # elif not self.is_false_touch() and finger_status[1::] == [0, 0, 0, 0]:
-                    #     return "press"
-                    hand_state = self.get_hand_state(hand)
+                    if hand['type'] == 'Left':
+                        hand_state = self.cur_left_hand_state
+                        pre_hand_state = self.pre_left_hand_state
+                        last_state_change_time = self.last_left_state_change_time
+                    else:
+                        hand_state = self.cur_right_hand_state
+                        pre_hand_state = self.pre_right_hand_state
+                        last_state_change_time = self.last_right_state_change_time
+
                     if hand_state == HandState.only_index_up:
-                        return "move",(self.get_pixels(hand),hand["type"])
+                        if time.time() - last_state_change_time > 0.1:
+                            return "move",(self.get_pixels(hand),hand["type"])
                     elif hand_state == HandState.three_fingers_up:
-                        return "scroll",(self.get_pixels(hand),hand["type"])
+                        if time.time() - last_state_change_time > 0.1:
+                            return "scroll",(self.get_pixels(hand),hand["type"])
                     elif hand_state == HandState.fist_gesture:
-                        return "press"
+                        if time.time() - last_state_change_time > 0.1:
+                            return "press"
                     elif hand_state == HandState.six_gesture:
-                        return "voice",(hand["type"],)
+                        if time.time() - last_state_change_time > 0.1:
+                            return "voice",(hand["type"],)
                     elif hand_state == HandState.delete_gesture:
-                        keyboard.tap(Key.backspace)
+                        if time.time() - last_state_change_time > 0.1:
+                            keyboard.tap(Key.backspace)
                     elif hand_state == HandState.four_fingers_up:
-                        self._four_fingers_up_trigger()
+                        if time.time() - last_state_change_time > 0.1:
+                            self._four_fingers_up_trigger()
                 
             return "wait"
 
@@ -466,7 +507,7 @@ class MyDetector(HandDetector):
                     #     mouse.press(Button.left)
                     #     return "move"
                     # el
-                    if finger_status[1::] == [1, 1, 1, 1] and self.detect_single_finger_state(hand["lmList"], 1) == FingerStatus.STRAIGHT_UP:
+                    if finger_status[1::] == [1, 1, 1, 1] and self.detect_single_finger_state(hand, 1) == FingerStatus.STRAIGHT_UP:
                         mouse.click(Button.left, 2)
                         return "wait",(hand["type"],)
             return "press"

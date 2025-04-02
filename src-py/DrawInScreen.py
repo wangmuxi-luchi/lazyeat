@@ -133,7 +133,22 @@ class ScreenDrawer:
                 win32gui.ShowWindow(hwnd, win32con.SW_HIDE)
                 win32gui.UpdateWindow(hwnd)
 
+    def move_circles(self, relative_x, relative_y):
+        mouse = win32api.GetCursorPos()
+        self.screen_center_x = mouse[0]
+        self.screen_center_y = mouse[1]
+        self.move_big_circle(0, 0)
+        self.move_small_circle(relative_x, relative_y)
+
+    def move_big_circle(self, relative_x, relative_y):
+        # 计算窗口左上角的坐标，使其位于屏幕中心
+        center_x = self.screen_center_x - self.big_window_width // 2
+        center_y = self.screen_center_y - self.big_window_height // 2
+        win32gui.PostMessage(self.big_hwnd, win32con.WM_MOVE, 0, (center_y << 16) | center_x)
+
+
     def move_small_circle(self, relative_x, relative_y):
+        
         scale = self.big_circle_radius
         # 归一化坐标转窗口中心像素坐标
         cx = relative_x*scale + self.screen_center_x
@@ -144,6 +159,7 @@ class ScreenDrawer:
         new_y = int(cy - self.small_window_height // 2)
         # print(f"移动窗口: x={new_x}, y={new_y}")
         win32gui.PostMessage(self.small_hwnd, win32con.WM_MOVE, 0, (new_y << 16) | new_x)
+
 
 
     def close_window(self):
@@ -230,6 +246,19 @@ class ScreenDrawer:
             win32gui.EndPaint(hwnd, paintStruct)
             
             
+            return 0
+        elif msg == win32con.WM_MOVE:
+            # 获取新的位置
+            x = lParam & 0xFFFF  # 获取 X 坐标
+            y = lParam >> 16     # 获取 Y 坐标
+
+            # 获取窗口的当前大小
+            rect = win32gui.GetWindowRect(hwnd)
+            width = rect[2] - rect[0]
+            height = rect[3] - rect[1]
+
+            # 移动窗口到新的位置，保持大小不变
+            win32gui.MoveWindow(hwnd, x, y, width, height, True)
             return 0
         # elif msg == 20:
         #     # print("拦截一条消息{}",msg)

@@ -122,14 +122,14 @@ class JoystickController:
         relative_pixelx = x - self.center_x
         relative_pixely = y - self.center_y
         # 对坐标进行滤波
-        update_ratio = 0.2
+        update_ratio = 0.08
         
         relative_move_x = lowpass_filter.filter_retdx("relative_pixelx", relative_pixelx, update_ratio)
         relative_move_y = lowpass_filter.filter_retdx("relative_pixely", relative_pixely, update_ratio)
         rpx = lowpass_filter.get_last_value("relative_pixelx")
         rpy = lowpass_filter.get_last_value("relative_pixely")
-        # 绘制摇杆圆
-        self.drawer.move_small_circle(-rpx/self.threshold, rpy/self.threshold)
+        # 移动摇杆圆
+        self.drawer.move_circles(-rpx/self.threshold, rpy/self.threshold)
         
         # 重置累积距离的整数部分，因为上一次返回时已经移动过了
         self.sum_dx = math.modf(self.sum_dx)[0]
@@ -171,7 +171,7 @@ class JoystickController:
         if finger_move_v < self.move_v:
             update_ratio = 1-update_ratio
         self.move_v = self.move_v * (1-update_ratio) + finger_move_v * update_ratio
-        if finger_move_v < 0.0001:
+        if finger_move_v < self.threshold*0.05:
             return 0, 0
         
         # 获取鼠标直接跟随手指移动的距离
@@ -186,6 +186,17 @@ class JoystickController:
         self.sum_dy += move_y 
         return math.modf(self.sum_dx)[1], math.modf(self.sum_dy)[1]
 
+    # def move_mouse(self, x, y):
+    #     """
+    #     根据输入的坐标移动鼠标。
+
+    #     :param x: 输入的 x 坐标
+    #     :param y: 输入的 y 坐标
+    #     """
+    #     dx, dy = self.calculate_movement(x, y)
+    #     # if dx != 0 or dy != 0:
+    #     #     DrawInScreen.move_mouse(dx, dy)
+    #     return dx, dy
 
 class lowpass_filter:
     """
