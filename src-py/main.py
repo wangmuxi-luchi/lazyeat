@@ -29,8 +29,8 @@ app.add_middleware(
 
 # config
 class Config:
-    show_detect_window: bool = True  # 显示检测窗口
-    camera_index: int = 0  # 当前摄像头索引
+    show_detect_window: bool = False  # 显示检测窗口
+    camera_index: int = 1  # 当前摄像头索引
 
 
 CONFIG = Config()
@@ -80,7 +80,6 @@ def thread_detect():
             break
 
         if not success:
-            print("cap.read() error")
             continue
 
         if CONFIG.show_detect_window:
@@ -113,11 +112,9 @@ def toggle_work():
             work_thread = threading.Thread(target=thread_detect)
             work_thread.daemon = True
             work_thread.start()
-            print("thread_detect started")
             return "started"
         else:
             flag_work = False
-            print("thread_detect stopped")
             return "stopped"
 
 
@@ -126,7 +123,7 @@ def update_config(data: dict):
     from pinia_store import PINIA_STORE
 
     global cap
-    CONFIG.show_detect_window = True# data.get("show_window", False)
+    CONFIG.show_detect_window = data.get("show_window", False)
 
     camera_index = int(data.get("camera_index", 0))
     if camera_index != CONFIG.camera_index:
@@ -152,7 +149,6 @@ def shutdown():
 
     import signal
     import os
-    # 向当前进程发送 SIGINT 信号，终止进程
     os.kill(os.getpid(), signal.SIGINT)
 
 
@@ -161,9 +157,7 @@ if __name__ == '__main__':
     t_init = threading.Thread(target=thread_init, daemon=True)
     t_init.start()
 
-    port = 62336
+    port = 62334
 
-    print("toggle_work")
-    toggle_work()
     print(f"Starting server at http://localhost:{port}/docs")
     uvicorn.run(app, host="127.0.0.1", port=port)
