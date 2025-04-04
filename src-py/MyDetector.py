@@ -106,7 +106,6 @@ class MyDetector(HandDetector):
     pre_right_hand_state = None
 
     mouse_joystick = JoystickController()
-    mouse_left_button_down = False
 
     wrong_hand_count = 0
 
@@ -116,9 +115,19 @@ class MyDetector(HandDetector):
     # movestate_dyn_cx = 0 # the x coordinate of the center of the hand in move state
     # movestate_dyn_cy = 0 # the y coordinate of the center of the hand in move state
     state_hand_type = None # the type of hand in move state
-    move_sensitivity = 300# 鼠标灵敏度
-    scroll_sensitivity = 10# 滚动灵敏度
-    mouse_threshold = 0.5 # 摇杆移动阈值
+    move_sensitivity = 150# 鼠标灵敏度
+    scroll_sensitivity = 3# 滚动灵敏度
+    move_threshold = 0.5 # 摇杆移动阈值
+    scroll_threshold = 0.2 # 摇杆移动阈值
+
+    mouse_left_button_down = False
+    mouse_right_button_down = False
+    pressed_button = None
+    click_threshold_min = 0.23 # 点击阈值
+    click_threshold_max = 0.38 # 点击阈值
+
+    # tipdis_threshold = 100 # 指尖距离阈值，超过这个距离就不移动
+
     movestate_base_finger = 1 # 移动基于哪根手指指尖，1代表食指，2代表中指，3代表无名指，4代表小拇指
 
 
@@ -133,6 +142,7 @@ class MyDetector(HandDetector):
 
     def __init__(self, mode=False, maxHands=2, detectionCon=0.5, minTrackCon=0.5):
         super().__init__(mode, maxHands, detectionCon, minTrackCon)
+        logging.info('MyDetector init')
 
         def init_voice_controller():
             from VoiceController import VoiceController
@@ -148,10 +158,14 @@ class MyDetector(HandDetector):
         thread.start()
 
         # 初始化状态机
+        logging.info('MyDetector init state machine')
         self.init_state_machine()
         # 初始化摇杆
-        self.mouse_joystick.set(self.move_sensitivity, self.mouse_threshold)
+        logging.info('MyDetector init joystick')
+        self.mouse_joystick.set(self.move_sensitivity, self.move_threshold)
 
+    def shutdown(self):
+        self.mouse_joystick.shutdown()
 
     def get_hand_state(self, hand):
         fingers = self.get_all_fingers_status(hand)
@@ -164,7 +178,6 @@ class MyDetector(HandDetector):
         if hand['type'] == 'Right' and delt_x < 0.6:
             # logging.info(f"right hand delt_x: {delt_x}")
             return HandState.other
-        # print(fingers)
 
         # 0,1,2,3,4 分别代表 大拇指，食指，中指，无名指，小拇指
         if fingers[1::] == [1, 0, 0, 0]:
@@ -196,8 +209,6 @@ class MyDetector(HandDetector):
                       (255, 0, 255), 2)
         return img
 
-    # 配置日志
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     
     def process(self, all_hands: List[dict]):
         # 没有手
@@ -215,28 +226,29 @@ class MyDetector(HandDetector):
                 if self.cur_left_hand_state != self.pre_left_hand_state:
                     self.last_change_flag_time = time.time()
 
-                # second_finger_pos = self.get_pixels(hand, 1, 3, is_3D=True)
-                # last_finger_pos = self.get_pixels(hand, 4, 3, is_3D=True)
-                # delt_x = second_finger_pos[0] - last_finger_pos[0]
-                # delt_y = second_finger_pos[1] - last_finger_pos[1]
-                # delt_z = second_finger_pos[2] - last_finger_pos[2]
+                # second_finger_pos = self.get_pixels(hand, 1, 0, is_3D=True)
+                # first_finger_pos = self.get_pixels(hand, 0, 0, is_3D=True)
+                # delt_x = second_finger_pos[0] - first_finger_pos[0]
+                # delt_y = second_finger_pos[1] - first_finger_pos[1]
+                # delt_z = second_finger_pos[2] - first_finger_pos[2]
                 # dis = math.sqrt(delt_x**2 + delt_y**2 + delt_z**2)
                 # # logging.info(f"左手状态: {hand_state} 第二根手指位置: {second_finger_pos} 第五根手指位置: {last_finger_pos}")
-                # logging.info(f"左手状态: {hand_state} 距离: {delt_x}")
+                # logging.info(f"左手状态: {hand_state} 距离: {dis}")
             else:
                 self.cur_right_hand_state = hand_state
                 if self.cur_right_hand_state!= self.pre_right_hand_state:
                     self.last_right_state_change_time = time.time()
 
-                # second_finger_pos = self.get_pixels(hand, 1, 3, is_3D=True)
-                # last_finger_pos = self.get_pixels(hand, 4, 3, is_3D=True)
-                # delt_x = second_finger_pos[0] - last_finger_pos[0]
-                # delt_y = second_finger_pos[1] - last_finger_pos[1]
-                # delt_z = second_finger_pos[2] - last_finger_pos[2]
+
+                # second_finger_pos = self.get_pixels(hand, 1, 0, is_3D=True)
+                # first_finger_pos = self.get_pixels(hand, 0, 0, is_3D=True)
+                # delt_x = second_finger_pos[0] - first_finger_pos[0]
+                # delt_y = second_finger_pos[1] - first_finger_pos[1]
+                # delt_z = second_finger_pos[2] - first_finger_pos[2]
                 # dis = math.sqrt(delt_x**2 + delt_y**2 + delt_z**2)
-                # # logging.info(f"右手状态: {hand_state} 第二根手指位置: {second_finger_pos} 第五根手指位置: {last_finger_pos}")
-                # logging.info(f"右手状态: {hand_state} 距离: {delt_x}")
-                # # logging.info(f"右手状态: {hand_state}")
+                # logging.info(f"左手状态: {hand_state} 第二根手指位置: {second_finger_pos} 第五根手指位置: {last_finger_pos}")
+                # logging.info(f"右手状态: {hand_state} 距离:{self.cal_palm_width(hand)} {self.cal_point_dis(hand, 5,17)}")
+                # logging.info(f"右手状态: {hand_state} 距离:{self.cal_finger_tip_dis(hand,0,1)} ")
                 
         # return
         self.state_machine.process_current_state(all_hands)
@@ -289,6 +301,22 @@ class MyDetector(HandDetector):
             return True
         return False
 
+    def mouse_button_press(self, button):
+        if button == Button.left and not self.mouse_left_button_down:
+            self.mouse_left_button_down = True
+            mouse.press(Button.left)
+        elif button == Button.right and not self.mouse_right_button_down:
+            self.mouse_right_button_down = True
+            mouse.press(Button.right)
+
+    def mouse_button_release(self, button):
+        if button == Button.left and self.mouse_left_button_down:
+            self.mouse_left_button_down = False
+            mouse.release(Button.left)
+        elif button == Button.right and self.mouse_right_button_down:
+            self.mouse_right_button_down = False
+            mouse.release(Button.right)
+
     def init_state_machine(self):
         self.state_machine = StateMachine("normal")
 
@@ -319,7 +347,7 @@ class MyDetector(HandDetector):
                         return "wait", (hand["type"],)
                         pass
                 
-                    logging.info(f"process_normal hand_state: {hand_state}")
+                    # logging.info(f"process_normal hand_state: {hand_state}")
                 # return "normal"
                 # finger_status = self.get_all_fingers_status(hand)
                 # if finger_status[1::] == [1, 1, 1, 1] or finger_status == [0, 1, 1, 1, 1] and self.detect_single_finger_state(hand["lmList"], 1) == FingerStatus.STRAIGHT_UP:
@@ -359,10 +387,57 @@ class MyDetector(HandDetector):
                     if hand["type"] == self.state_hand_type:
                         index_tip_pixels = self.get_pixels(hand, 1) # 食指指尖
                         if index_tip_pixels:
-                            move_x,move_y = self.mouse_joystick.calculate_movement(index_tip_pixels[0], index_tip_pixels[1])
+                            # move_x,move_y = self.mouse_joystick.calculate_movement(index_tip_pixels[0], index_tip_pixels[1])
+                            
+                            dis02 = self.cal_finger_tip_dis(hand,0,2)# 计算拇指到中指的距离
+                            dis03 = self.cal_finger_tip_dis(hand,0,3)# 计算拇指到无名指的距离
+                            
+                            tem_button = None
+                            if self.pressed_button is None:
+                                button_control_dis = min(dis02,dis03)
+                                if dis02 > dis03:
+                                    sign_dis = -button_control_dis
+                                    tem_button = Button.right
+                                else:
+                                    sign_dis = button_control_dis
+                                    tem_button = Button.left
+                            elif self.pressed_button == Button.right:
+                                button_control_dis = dis03
+                                sign_dis = -button_control_dis
+                            elif self.pressed_button == Button.left:
+                                button_control_dis = dis02
+                                sign_dis = button_control_dis
+                            else:
+                                button_control_dis = min(dis02,dis03)
+                                if dis02 > dis03:
+                                    sign_dis = -button_control_dis
+                                    tem_button = Button.right
+                                else:
+                                    sign_dis = button_control_dis
+                                    tem_button = Button.left
+                                self.pressed_button = None
+                            
+
+
+                            if button_control_dis < self.click_threshold_min and self.pressed_button is None:
+                                self.pressed_button = tem_button
+                                self.mouse_button_press(self.pressed_button)
+                                self.mouse_joystick.set_control_threshold(self.click_threshold_max)
+                                # logging.info(f"process_move : {dis02} {dis03}")
+                                # time.sleep(0.25)
+                            if button_control_dis > self.click_threshold_max :
+                                if self.pressed_button is not None and self.pressed_button in [Button.left,Button.right]:
+                                    self.mouse_button_release(self.pressed_button)
+                                self.mouse_joystick.set_control_threshold(self.click_threshold_min)
+                                self.pressed_button = None
+                            
+
+                            move_x,move_y = self.mouse_joystick.calculate_movement(index_tip_pixels[0], index_tip_pixels[1],sign_dis)
                             # 计算相对位置
                             mouse.move(move_x,move_y)
-                            logging.info(f"process_move : {move_x} {move_y}")
+
+                            # 扩展快捷点击
+                            # logging.info(f"process_move : {move_x} {move_y}")
                     elif len(all_hands) == 1:
                         self.wrong_hand_count += 1
                         if self.wrong_hand_count > 10:
@@ -386,7 +461,12 @@ class MyDetector(HandDetector):
             self.wrong_hand_count = 0
             self.mouse_joystick.set_top(tip_pixels[0], tip_pixels[1])
             self.mouse_joystick.set_sensitivity(self.move_sensitivity)
+            self.mouse_joystick.set_threshold(self.move_threshold)
+            self.mouse_joystick.set_control_mode(2, self.click_threshold_min)
             self.state_hand_type = hand_type
+
+            for button in [Button.left,Button.right]:
+                self.mouse_button_release(button)
             return True
             # self.movestate_base_finger = base_finger
             # self.movestate_start_center = (tip_pixels[0], tip_pixels[1]+self.movestate_threshold)
@@ -400,6 +480,8 @@ class MyDetector(HandDetector):
 
         
         def exit_move():
+            for button in [Button.left,Button.right]:
+                self.mouse_button_release(button)
             self.mouse_joystick.hide()
         
 
@@ -408,12 +490,12 @@ class MyDetector(HandDetector):
             if len(all_hands) > 0:
                 for hand in all_hands:
                     if hand["type"] == self.state_hand_type:
-                        index_tip_pixels = self.get_pixels(hand, 1) # 食指指尖
+                        index_tip_pixels = self.get_pixels(hand, 0) # 拇指指尖
                         if index_tip_pixels:
-                            scroll_x,scroll_y = self.mouse_joystick.calculate_movement(index_tip_pixels[0], index_tip_pixels[1])
+                            scroll_x,scroll_y = self.mouse_joystick.calculate_movement(index_tip_pixels[0], index_tip_pixels[1],self.cal_finger_tip_dis(hand,0,1))
                             # 计算相对位置
                             mouse.scroll(scroll_x,scroll_y)
-                            logging.info(f"process_scroll : {scroll_x} {scroll_y}")
+                            # logging.info(f"process_scroll : {scroll_x} {scroll_y}")
                     elif len(all_hands) == 1:
                         self.wrong_hand_count += 1
                         if self.wrong_hand_count > 10:
@@ -442,6 +524,8 @@ class MyDetector(HandDetector):
             self.wrong_hand_count = 0
             self.mouse_joystick.set_top(tip_pixels[0], tip_pixels[1])
             self.mouse_joystick.set_sensitivity(self.scroll_sensitivity)
+            self.mouse_joystick.set_threshold(self.scroll_threshold)
+            self.mouse_joystick.set_control_mode(1)
             self.state_hand_type = hand_type
             return True
 
@@ -467,10 +551,10 @@ class MyDetector(HandDetector):
                             return "move",(self.get_pixels(hand),hand["type"])
                     elif hand_state == HandState.three_fingers_up:
                         if time.time() - last_state_change_time > 0.1:
-                            return "scroll",(self.get_pixels(hand),hand["type"])
-                    elif hand_state == HandState.fist_gesture:
-                        if time.time() - last_state_change_time > 0.1:
-                            return "press"
+                            return "scroll",(self.get_pixels(hand,0),hand["type"])
+                    # elif hand_state == HandState.fist_gesture:
+                    #     if time.time() - last_state_change_time > 0.1:
+                    #         return "press"
                     elif hand_state == HandState.six_gesture:
                         if time.time() - last_state_change_time > 0.1:
                             return "voice",(hand["type"],)
@@ -495,7 +579,6 @@ class MyDetector(HandDetector):
             #     return "normal"
 
             # mouse.click(Button.left, 1)
-            # # print(length)
             # self.last_click_time = current_time
             if time.time() - self.state_change_time > 0.5:
                 mouse.click(Button.left, 1)

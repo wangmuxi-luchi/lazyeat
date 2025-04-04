@@ -307,23 +307,54 @@ class HandDetector:
 
         return fingers_status
 
-    def cal_palm_width(self, myHand):
+    def cal_point_dis(self, myHand, idx1, idx2, is_3D = True):
+        """
+        计算两点之间的距离。
+        :param myHand: 包含手部信息的字典，如关键点坐标、手部类型等
+        :param idx1: 第一个点的索引
+        :param idx2: 第二个点的索引
+        :return: 两点之间的距离
+        """
+        myLmList = myHand["lmList"]
+        point1 = myLmList[idx1]  # 第一个点的坐标
+        point2 = myLmList[idx2]  # 第二个点的坐标
+        delt_x = point1[0] - point2[0]
+        delt_y = point1[1] - point2[1]
+        delt_z = point1[2] - point2[2]
+        if is_3D:
+            distance = math.sqrt(delt_x**2 + delt_y**2 + delt_z**2)
+        else:
+            distance = math.sqrt(delt_x**2 + delt_y**2)
+        return distance
+
+
+    def cal_palm_width(self, myHand, is_3D = True):
         """
         计算手掌宽度。
         :param myHand: 包含手部信息的字典，如关键点坐标、手部类型等
         :return: 手掌宽度
         """
-        myLmList = myHand["lmList"]
         # 计算手掌宽度
-        second_finger_idx = self.tipIds[1] - 3# 食指指尖的关键点索引
-        last_finger_idx = self.tipIds[4] - 3# 食指指尖的关键点索引
-        second_finger_pos = myLmList[second_finger_idx]  # 中指
-        last_finger_pos = myLmList[last_finger_idx]  # 小指
-        delt_x = second_finger_pos[0] - last_finger_pos[0]
-        delt_y = second_finger_pos[1] - last_finger_pos[1]
-        delt_z = second_finger_pos[2] - last_finger_pos[2]
-        palm_width = math.sqrt(delt_x**2 + delt_y**2 + delt_z**2)
-        return palm_width
+        second_finger_idx = self.tipIds[1] - 3# 食指指根的关键点索引
+        last_finger_idx = self.tipIds[4] - 3# 小指指根的关键点索引
+        ret =  self.cal_point_dis(myHand, second_finger_idx, last_finger_idx, is_3D)
+        if ret == 0:
+            return 1
+        return ret
+
+    def cal_finger_tip_dis(self, myHand, finger1, finger2, is_3D = True):
+        """
+        计算手指之间的距离。
+        :param myHand: 包含手部信息的字典，如关键点坐标、手部类型等
+        :param finger1: 第一个手指的索引，0代表大拇指，1代表食指，2代表中指，3代表无名指，4代表小指
+        :param finger2: 第二个手指的索引，0代表大拇指，1代表食指，2代表中指，3代表无名指，4代表小指
+        :return: 手指之间的距离
+        """
+        palm_width = self.cal_palm_width(myHand, is_3D)
+        finger1_tip_idx = self.tipIds[finger1] # 指尖的关键点索引
+        finger2_tip_idx = self.tipIds[finger2] # 指尖的关键点索引
+        return self.cal_point_dis(myHand, finger1_tip_idx, finger2_tip_idx, is_3D)/palm_width
+
 
     def get_pixels(self, myHand, finger = -1,offset = 0, normalized = True, is_3D = False):
         """

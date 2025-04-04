@@ -2,7 +2,6 @@ import math
 import time
 import DrawInScreen
 
-
 class JoystickController:
     """
     摇杆控制类，用于处理摇杆输入并生成相应的移动距离。
@@ -12,7 +11,7 @@ class JoystickController:
     drawer = None
     # 绘制摇杆的线程
     draw_circle_thread = None
-    def __init__(self, sensitivity=1.0, threshold=10, center_x=0, center_y=0):
+    def __init__(self, sensitivity=1.0, move_threshold=10, center_x=0, center_y=0, control_mode = 0,control_threshold=0.45):
         """
         初始化摇杆控制类。
 
@@ -20,15 +19,18 @@ class JoystickController:
         :param threshold: 阈值，用于判断是否忽略小幅度的移动，默认为 10
         :param center_x: 中心点的 x 坐标，默认为 0
         :param center_y: 中心点的 y 坐标，默认为 0
+        :param control_mode: 控制模式，默认为 0，0为传统模式，1为拓展模式，默认为0
+        :param control_threshold: 拓展控制模式参数,距离小于这个阈值时才启动控制，默认为0.45
         """
         self.sensitivity = sensitivity
-        self.threshold = threshold
+        self.move_threshold = move_threshold
         self.center_x = center_x
         self.center_y = center_y
+        self.control_mode = control_mode    # 控制模式,0为传统模式，1为拓展模式
+        self.control_threshold = control_threshold  # 拓展控制模式,距离小于这个阈值时才启动控制
+
         self.move_v = 0  # 鼠标移动速度
 
-        self.lrpx = None  # last_relative_pixelx,used for filter
-        self.lrpy = None  # last_relative_pixely,used for filter
         self.last_time = None  # last time of movement,used for filter
         self.sum_dy = 0  # sum of dy,prevent decimal truncation
         self.sum_dx = 0  # sum of dx,prevent decimal truncation
@@ -39,6 +41,19 @@ class JoystickController:
         else:
             self.drawer, self.draw_circle_thread = DrawInScreen.init_drawcircle_thread()
             # self.drawer.hide()
+        
+        if control_mode == 1 or control_mode == 2: # 拓展控制模式
+            self.drawer.set_circle_2()
+        else: # 传统控制模式
+            self.drawer.set_circle_2(False)
+
+    def shutdown(self):
+        """
+        关闭摇杆控制类。
+        """
+        if self.drawer is not None:
+            self.drawer.close_window()
+
 
     def set(self, sensitivity=1.0, threshold=10, center_x=0, center_y=0):
         """
@@ -50,9 +65,31 @@ class JoystickController:
         :param center_y: 中心点的 y 坐标，默认为 0
         """
         self.sensitivity = sensitivity
-        self.threshold = threshold
+        self.move_threshold = threshold
         self.center_x = center_x
         self.center_y = center_y
+        self.clear_movestate()
+    
+    def set_control_mode(self, control_mode = 0,control_threshold=0.45):
+        """
+        设置控制模式。
+
+        :param control_mode: 控制模式，默认为 0，0为传统模式，1、2为拓展模式，默认为0
+        :param control_threshold: 拓展控制模式参数,距离小于这个阈值时才启动控制，默认为0.45
+        """
+        self.control_mode = control_mode    # 控制模式,0为传统模式，1为拓展模式
+        if control_mode == 1 or control_mode == 2: # 拓展控制模式
+            self.drawer.set_circle_2()
+        else: # 传统控制模式
+            self.drawer.set_circle_2(False)
+        self.control_threshold = control_threshold  # 拓展控制模式
+    
+    def set_control_threshold(self, control_threshold=0.45):
+        """
+        设置拓展控制模式阈值。
+        :param control_threshold: 拓展控制模式参数,默认为0.45
+        """
+        self.control_threshold = control_threshold  # 拓展控制模式阈值
 
     def show(self):
         """
@@ -81,6 +118,7 @@ class JoystickController:
         :param sensitivity: 新的灵敏度值
         """
         self.sensitivity = sensitivity
+        self.clear_movestate()
 
     def set_threshold(self, threshold):
         """
@@ -88,7 +126,8 @@ class JoystickController:
 
         :param threshold: 新的阈值
         """
-        self.threshold = threshold
+        self.move_threshold = threshold
+        self.clear_movestate()
 
     def set_top(self, top_x, top_y):
         """
@@ -98,7 +137,8 @@ class JoystickController:
         :param top_y: 新的顶部 y 坐标
         """
         self.center_x = top_x
-        self.center_y = top_y + self.threshold
+        self.center_y = top_y + self.move_threshold
+        self.clear_movestate()
 
     def set_center(self, center_x, center_y):
         """
@@ -109,8 +149,18 @@ class JoystickController:
         """
         self.center_x = center_x
         self.center_y = center_y
+        self.clear_movestate()
 
-    def calculate_movement(self, x, y):
+    def clear_movestate(self):
+        """
+        清除移动状态。
+        """
+        self.last_time = None  # last time of movement,used for filter
+        self.sum_dy = 0  # sum of dy,prevent decimal truncation
+        self.sum_dx = 0  # sum of dx,prevent decimal truncation
+        lowpass_filter.clear_all()
+
+    def calculate_movement(self, x, y, control_dis = 0):
         """
         根据输入的坐标计算移动距离。
 
@@ -129,7 +179,29 @@ class JoystickController:
         rpx = lowpass_filter.get_last_value("relative_pixelx")
         rpy = lowpass_filter.get_last_value("relative_pixely")
         # 移动摇杆圆
-        self.drawer.move_circles(-rpx/self.threshold, rpy/self.threshold)
+        if self.control_mode in[1,2]: # 拓展控制模式
+            control_dis = math.copysign(min(abs(control_dis), 2.5*self.control_threshold), control_dis)
+        if self.control_mode == 1: # 拓展控制模式
+            if abs(control_dis) > self.control_threshold: # 控制距离小于阈值时才启动控制
+                self.drawer.update_circle2(control_dis/self.control_threshold)
+                self.drawer.move_circles(0,0)
+                self.center_x = x
+                self.center_y = y
+                self.clear_movestate()
+                return 0, 0
+            else:
+                self.drawer.update_circle2(0)
+                self.drawer.move_circles(-rpx/self.move_threshold, rpy/self.move_threshold)
+        elif self.control_mode == 2:
+            if abs(control_dis) > self.control_threshold: # 控制距离不影响控制，只影响显示
+                self.drawer.update_circle2(control_dis/self.control_threshold)
+            else:
+                self.drawer.update_circle2(0)
+            self.drawer.move_circles(-rpx/self.move_threshold, rpy/self.move_threshold)
+        else: # 传统控制模式
+            self.drawer.move_circles(-rpx/self.move_threshold, rpy/self.move_threshold)
+            self.drawer.update_circle2(0)
+
         
         # 重置累积距离的整数部分，因为上一次返回时已经移动过了
         self.sum_dx = math.modf(self.sum_dx)[0]
@@ -149,11 +221,11 @@ class JoystickController:
 
         # 判断是否超过触发摇杆阈值
         relative_move_dis = (rpx**2 + rpy**2)**0.5
-        relative_move_dis = min(relative_move_dis, 2*self.threshold)
-        if relative_move_dis > self.threshold:
+        relative_move_dis = min(relative_move_dis, 2*self.move_threshold)
+        if relative_move_dis > self.move_threshold:
             ## 计算摇杆移动鼠标的距离
             # 计算实际需要移动的距离
-            scaling = 10*dt*(relative_move_dis-self.threshold) / relative_move_dis #非线性提速
+            scaling = 10*dt*(relative_move_dis-self.move_threshold) / relative_move_dis #非线性提速
             move_x = rpx * scaling
             move_y = rpy * scaling
 
@@ -171,7 +243,7 @@ class JoystickController:
         if finger_move_v < self.move_v:
             update_ratio = 1-update_ratio
         self.move_v = self.move_v * (1-update_ratio) + finger_move_v * update_ratio
-        if finger_move_v < self.threshold*0.05:
+        if finger_move_v < self.move_threshold*0.05:
             return 0, 0
         
         # 获取鼠标直接跟随手指移动的距离
@@ -244,6 +316,12 @@ class lowpass_filter:
             return None
         return cls.filters[name].last_value
     
+    @classmethod
+    def clear_all(cls):
+        """
+        清除所有低通滤波器。
+        """
+        cls.filters = {}
 
     def __init__(self, name, input_value,update_ratio):
         """
