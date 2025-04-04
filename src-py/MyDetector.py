@@ -118,12 +118,14 @@ class MyDetector(HandDetector):
     move_sensitivity = 150# 鼠标灵敏度
     scroll_sensitivity = 3# 滚动灵敏度
     move_threshold = 0.5 # 摇杆移动阈值
-    scroll_threshold = 0.2 # 摇杆移动阈值
+    scroll_threshold = 0.5 # 摇杆移动阈值
 
     mouse_left_button_down = False
     mouse_right_button_down = False
     pressed_button = None
-    click_threshold_min = 0.23 # 点击阈值
+
+    # 滞回比较器控制点击阈值
+    click_threshold_min = 0.33 # 点击阈值
     click_threshold_max = 0.38 # 点击阈值
 
     # tipdis_threshold = 100 # 指尖距离阈值，超过这个距离就不移动
@@ -316,6 +318,10 @@ class MyDetector(HandDetector):
         elif button == Button.right and self.mouse_right_button_down:
             self.mouse_right_button_down = False
             mouse.release(Button.right)
+    
+    def mouse_button_clear(self):
+        for button in [Button.left, Button.right]:
+            self.mouse_button_release(button)
 
     def init_state_machine(self):
         self.state_machine = StateMachine("normal")
@@ -465,8 +471,7 @@ class MyDetector(HandDetector):
             self.mouse_joystick.set_control_mode(2, self.click_threshold_min)
             self.state_hand_type = hand_type
 
-            for button in [Button.left,Button.right]:
-                self.mouse_button_release(button)
+            self.mouse_button_clear()
             return True
             # self.movestate_base_finger = base_finger
             # self.movestate_start_center = (tip_pixels[0], tip_pixels[1]+self.movestate_threshold)
@@ -480,8 +485,7 @@ class MyDetector(HandDetector):
 
         
         def exit_move():
-            for button in [Button.left,Button.right]:
-                self.mouse_button_release(button)
+            self.mouse_button_clear()
             self.mouse_joystick.hide()
         
 
@@ -490,9 +494,9 @@ class MyDetector(HandDetector):
             if len(all_hands) > 0:
                 for hand in all_hands:
                     if hand["type"] == self.state_hand_type:
-                        index_tip_pixels = self.get_pixels(hand, 0) # 拇指指尖
+                        index_tip_pixels = self.get_pixels(hand, 1) # 指尖
                         if index_tip_pixels:
-                            scroll_x,scroll_y = self.mouse_joystick.calculate_movement(index_tip_pixels[0], index_tip_pixels[1],self.cal_finger_tip_dis(hand,0,1))
+                            scroll_x,scroll_y = self.mouse_joystick.calculate_movement(index_tip_pixels[0], index_tip_pixels[1],self.cal_finger_tip_dis(hand,0,2))
                             # 计算相对位置
                             mouse.scroll(scroll_x,scroll_y)
                             # logging.info(f"process_scroll : {scroll_x} {scroll_y}")
@@ -551,7 +555,7 @@ class MyDetector(HandDetector):
                             return "move",(self.get_pixels(hand),hand["type"])
                     elif hand_state == HandState.three_fingers_up:
                         if time.time() - last_state_change_time > 0.1:
-                            return "scroll",(self.get_pixels(hand,0),hand["type"])
+                            return "scroll",(self.get_pixels(hand,1),hand["type"])
                     # elif hand_state == HandState.fist_gesture:
                     #     if time.time() - last_state_change_time > 0.1:
                     #         return "press"

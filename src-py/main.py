@@ -227,5 +227,5 @@ if __name__ == '__main__':
     init_app()
     print(f"Starting server at http://localhost:{port}/docs")
     # debug
-    uvicorn.run(app='main:init_app', host="127.0.0.1", port=port, reload=True, factory=True)
-    # uvicorn.run(app, host="127.0.0.1", port=port)
+    # uvicorn.run(app='main:init_app', host="127.0.0.1", port=port, reload=True, factory=True)
+    uvicorn.run(app, host="127.0.0.1", port=port)

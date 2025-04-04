@@ -86,7 +86,7 @@ class ScreenDrawer:
         self.small_hwnd = None
 
         # 扩展样式
-        self.circle2_circle_radius = 50
+        self.circle2_circle_radius = 20
         self.circle2_circle_color = win32api.RGB(97, 175, 239)  # 蓝色
         self.circle2_window_width = self.circle2_circle_radius * 2 + 4
         self.circle2_window_height = self.circle2_circle_radius * 2 + 4
@@ -246,8 +246,8 @@ class ScreenDrawer:
 
     def move_small_circle(self, relative_x, relative_y):
         
-        scale = self.big_circle_radius
-        # 归一化坐标转窗口中心像素坐标
+        # 归一化坐标转窗口中心像素坐标，relative_x为1时大圆小圆刚好相切
+        scale = self.big_circle_radius - self.small_circle_radius
         cx = relative_x*scale + self.screen_center_x
         cy = relative_y*scale + self.screen_center_y
 
@@ -258,8 +258,8 @@ class ScreenDrawer:
         win32gui.PostMessage(self.small_hwnd, win32con.WM_MOVE, 0, (new_y << 16) | new_x)
 
     def move_circle2(self, relative_poision):
-        # 归一化坐标转窗口中心像素坐标
-        cx = self.screen_center_x - self.big_circle_radius * relative_poision
+        # 归一化坐标转窗口中心像素坐标，relative_poision为1时圆刚好相切
+        cx = self.screen_center_x - (self.big_circle_radius+self.circle2_circle_radius) * relative_poision
         cy = self.screen_center_y
         cx = int(cx)
         cy = int(cy)

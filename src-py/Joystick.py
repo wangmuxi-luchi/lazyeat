@@ -24,6 +24,7 @@ class JoystickController:
         """
         self.sensitivity = sensitivity
         self.move_threshold = move_threshold
+        self.dyn_move_threshold = move_threshold
         self.center_x = center_x
         self.center_y = center_y
         self.control_mode = control_mode    # 控制模式,0为传统模式，1为拓展模式
@@ -158,7 +159,8 @@ class JoystickController:
         self.last_time = None  # last time of movement,used for filter
         self.sum_dy = 0  # sum of dy,prevent decimal truncation
         self.sum_dx = 0  # sum of dx,prevent decimal truncation
-        lowpass_filter.clear_all()
+        self.dyn_move_threshold = self.move_threshold
+        LowpassFilter.clear_all()
 
     def calculate_movement(self, x, y, control_dis = 0):
         """
@@ -172,34 +174,46 @@ class JoystickController:
         relative_pixelx = x - self.center_x
         relative_pixely = y - self.center_y
         # 对坐标进行滤波
-        update_ratio = 0.08
+        update_ratio = 0.18
         
-        relative_move_x = lowpass_filter.filter_retdx("relative_pixelx", relative_pixelx, update_ratio)
-        relative_move_y = lowpass_filter.filter_retdx("relative_pixely", relative_pixely, update_ratio)
-        rpx = lowpass_filter.get_last_value("relative_pixelx")
-        rpy = lowpass_filter.get_last_value("relative_pixely")
+        relative_move_x = LowpassFilter.filter_retdx("relative_pixelx", relative_pixelx, update_ratio)
+        relative_move_y = LowpassFilter.filter_retdx("relative_pixely", relative_pixely, update_ratio)
+        rpx = LowpassFilter.get_last_value("relative_pixelx")
+        rpy = LowpassFilter.get_last_value("relative_pixely")
+        # 计算动态移动阈值
+        update_ratio = 0.035
+        relative_dis = (rpx**2 + rpy**2)**0.5
+        if relative_dis > self.dyn_move_threshold:
+            self.dyn_move_threshold = LowpassFilter.run_filter("self.dyn_move_threshold", self.move_threshold*0.5, update_ratio)
+        else:
+            self.dyn_move_threshold = LowpassFilter.run_filter("self.dyn_move_threshold", self.move_threshold, update_ratio)
+        # print("self.dyn_move_threshold{}", self.dyn_move_threshold)
+
         # 移动摇杆圆
         if self.control_mode in[1,2]: # 拓展控制模式
             control_dis = math.copysign(min(abs(control_dis), 2.5*self.control_threshold), control_dis)
         if self.control_mode == 1: # 拓展控制模式
+
             if abs(control_dis) > self.control_threshold: # 控制距离小于阈值时才启动控制
                 self.drawer.update_circle2(control_dis/self.control_threshold)
-                self.drawer.move_circles(0,0)
+                # self.drawer.move_circles(0,0)
                 self.center_x = x
                 self.center_y = y
+                
+                self.drawer.move_circles(-rpx/self.dyn_move_threshold, rpy/self.dyn_move_threshold)
                 self.clear_movestate()
                 return 0, 0
             else:
                 self.drawer.update_circle2(0)
-                self.drawer.move_circles(-rpx/self.move_threshold, rpy/self.move_threshold)
+                self.drawer.move_circles(-rpx/self.dyn_move_threshold, rpy/self.dyn_move_threshold)
         elif self.control_mode == 2:
             if abs(control_dis) > self.control_threshold: # 控制距离不影响控制，只影响显示
                 self.drawer.update_circle2(control_dis/self.control_threshold)
             else:
                 self.drawer.update_circle2(0)
-            self.drawer.move_circles(-rpx/self.move_threshold, rpy/self.move_threshold)
+            self.drawer.move_circles(-rpx/self.dyn_move_threshold, rpy/self.dyn_move_threshold)
         else: # 传统控制模式
-            self.drawer.move_circles(-rpx/self.move_threshold, rpy/self.move_threshold)
+            self.drawer.move_circles(-rpx/self.dyn_move_threshold, rpy/self.dyn_move_threshold)
             self.drawer.update_circle2(0)
 
         
@@ -220,12 +234,11 @@ class JoystickController:
             return 0, 0
 
         # 判断是否超过触发摇杆阈值
-        relative_move_dis = (rpx**2 + rpy**2)**0.5
-        relative_move_dis = min(relative_move_dis, 2*self.move_threshold)
-        if relative_move_dis > self.move_threshold:
+        relative_move_dis = min(relative_dis, 2*self.dyn_move_threshold)
+        if relative_move_dis > self.dyn_move_threshold:
             ## 计算摇杆移动鼠标的距离
             # 计算实际需要移动的距离
-            scaling = 10*dt*(relative_move_dis-self.move_threshold) / relative_move_dis #非线性提速
+            scaling = 6*dt*(relative_move_dis-self.dyn_move_threshold) / relative_move_dis 
             move_x = rpx * scaling
             move_y = rpy * scaling
 
@@ -243,7 +256,7 @@ class JoystickController:
         if finger_move_v < self.move_v:
             update_ratio = 1-update_ratio
         self.move_v = self.move_v * (1-update_ratio) + finger_move_v * update_ratio
-        if finger_move_v < self.move_threshold*0.05:
+        if finger_move_v < self.dyn_move_threshold*0.05:
             return 0, 0
         
         # 获取鼠标直接跟随手指移动的距离
@@ -270,14 +283,14 @@ class JoystickController:
     #     #     DrawInScreen.move_mouse(dx, dy)
     #     return dx, dy
 
-class lowpass_filter:
+class LowpassFilter:
     """
     低通滤波器类，用于对输入信号进行低通滤波。
     """
     filters = {}  # 存储滤波器的字典，键为滤波器名称，值为滤波器实例
 
     @classmethod
-    def filter(cls,name, input_value, update_ratio=0.5):
+    def run_filter(cls,name, input_value, update_ratio=0.5):
         """
         调用指定名称的低通滤波器进行滤波。
         :param name: 滤波器名称
@@ -285,7 +298,7 @@ class lowpass_filter:
         :return: 滤波后的信号值
         """
         if name not in cls.filters:  # 如果滤波器不存在，则创建一个新的滤波器实例
-            cls.filters[name] = cls(name, update_ratio)  # 假设默认的更新比率为0.5
+            cls.filters[name] = cls(name, input_value, update_ratio)  # 假设默认的更新比率为0.5
         return cls.filters[name].filter(input_value)  # 调用滤波器的filter方法进行滤波
     
     @classmethod
@@ -349,7 +362,7 @@ class lowpass_filter:
 
 if __name__ == "__main__":
     # 创建一个低通滤波器实例
-    filter = lowpass_filter("my_filter", 1,0.5)  # 假设默认的更新比率为0.5
+    filter = LowpassFilter("my_filter", 1,0.5)  # 假设默认的更新比率为0.5
 
     # 模拟输入信号
     input_values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -359,5 +372,5 @@ if __name__ == "__main__":
         print(f"Input: {input_value}, Filtered: {filtered_value}")
 
     for input_value in input_values:
-        filtered_value = lowpass_filter.filter_retdx("my_filter2", input_value, 0.5)  # 调用滤波器的filter方法进行滤波
+        filtered_value = LowpassFilter.filter_retdx("my_filter2", input_value, 0.5)  # 调用滤波器的filter方法进行滤波
         print(f"Input: {input_value}, Filtered: {filtered_value}")
