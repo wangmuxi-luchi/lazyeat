@@ -1,7 +1,7 @@
 import math
 import time
 import DrawInScreen
-
+import win32api
 class JoystickController:
     """
     摇杆控制类，用于处理摇杆输入并生成相应的移动距离。
@@ -11,7 +11,7 @@ class JoystickController:
     drawer = None
     # 绘制摇杆的线程
     draw_circle_thread = None
-    def __init__(self, sensitivity=1.0, move_threshold=10, center_x=0, center_y=0, control_mode = 0,control_threshold=0.45):
+    def __init__(self, sensitivity=1.0, move_threshold=10, center_x=0, center_y=0, control_mode = 0,control_threshold_min=0.45,control_threshold_max=0.55):
         """
         初始化摇杆控制类。
 
@@ -19,7 +19,7 @@ class JoystickController:
         :param threshold: 阈值，用于判断是否忽略小幅度的移动，默认为 10
         :param center_x: 中心点的 x 坐标，默认为 0
         :param center_y: 中心点的 y 坐标，默认为 0
-        :param control_mode: 控制模式，默认为 0，0为传统模式，1为拓展模式，默认为0
+        :param control_mode: 控制模式，默认为 0，0为传统模式，1、2为拓展模式，3、4为显示模式，默认为0
         :param control_threshold: 拓展控制模式参数,距离小于这个阈值时才启动控制，默认为0.45
         """
         self.sensitivity = sensitivity
@@ -27,8 +27,13 @@ class JoystickController:
         self.dyn_move_threshold = move_threshold
         self.center_x = center_x
         self.center_y = center_y
-        self.control_mode = control_mode    # 控制模式,0为传统模式，1为拓展模式
-        self.control_threshold = control_threshold  # 拓展控制模式,距离小于这个阈值时才启动控制
+        # self.control_mode = control_mode    # 控制模式,0为传统模式，1为拓展模式
+        self.set_control_mode(control_mode,control_threshold_min,control_threshold_max) # 控制模式,0为传统模式，1为拓展模式
+
+        self.dyn_control_threshold = control_threshold_min
+        self.control_threshold_min = control_threshold_min  # 拓展控制模式,距离小于这个阈值时才启动控制
+        self.control_threshold_max = control_threshold_max  # 拓展控制模式,距离大于这个阈值时才停止控制
+        self.control_on = False  # 控制是否开启
 
         self.move_v = 0  # 鼠标移动速度
 
@@ -43,10 +48,19 @@ class JoystickController:
             self.drawer, self.draw_circle_thread = DrawInScreen.init_drawcircle_thread()
             # self.drawer.hide()
         
-        if control_mode == 1 or control_mode == 2: # 拓展控制模式
-            self.drawer.set_circle_2()
-        else: # 传统控制模式
-            self.drawer.set_circle_2(False)
+        # if control_mode == 1 or control_mode == 2: # 拓展控制模式
+        #     self.drawer.set_circle_2()
+        # else: # 传统控制模式
+        #     self.drawer.set_circle_2(False)
+
+    def drawer_running(self):
+        """
+        检查绘制器是否正在运行。
+        """
+        if self.drawer is not None and self.draw_circle_thread is not None and self.draw_circle_thread.is_alive():
+            return True
+        else:
+            return False
 
     def shutdown(self):
         """
@@ -71,36 +85,62 @@ class JoystickController:
         self.center_y = center_y
         self.clear_movestate()
     
-    def set_control_mode(self, control_mode = 0,control_threshold=0.45):
+    def set_control_mode(self, control_mode = 0,control_threshold_min=0.45,control_threshold_max=0.55):
         """
         设置控制模式。
 
         :param control_mode: 控制模式，默认为 0，0为传统模式，1、2为拓展模式，默认为0
         :param control_threshold: 拓展控制模式参数,距离小于这个阈值时才启动控制，默认为0.45
         """
+        self.set_big_circle_color(win32api.RGB(255, 0, 0))
+        if not self.drawer_running():
+            return False
         self.control_mode = control_mode    # 控制模式,0为传统模式，1为拓展模式
-        if control_mode == 1 or control_mode == 2: # 拓展控制模式
+
+        if control_mode == 3:
+            self.drawer.only_show(False, True)
+            self.drawer.move_circles(0,0,False)
+        elif control_mode == 4:
+            self.drawer.only_show(True, True)
+            self.drawer.move_circles(0,0,False)
+        elif control_mode == 1 or control_mode == 2: # 拓展控制模式
+            self.show()
             self.drawer.set_circle_2()
         else: # 传统控制模式
+            self.show()
             self.drawer.set_circle_2(False)
-        self.control_threshold = control_threshold  # 拓展控制模式
+            
+        self.control_threshold_min = control_threshold_min  # 拓展控制模式
+        self.control_threshold_max = control_threshold_max  # 拓展控制模式
+        return True
+    
+    def set_big_circle_color(self, color):
+        """
+        设置大圆圈的颜色。
+
+        :param color: 大圆圈的颜色
+        """
+        if self.drawer_running():
+            self.drawer.set_big_circle_color(color)
     
     def set_control_threshold(self, control_threshold=0.45):
         """
         设置拓展控制模式阈值。
         :param control_threshold: 拓展控制模式参数,默认为0.45
         """
-        self.control_threshold = control_threshold  # 拓展控制模式阈值
+        self.control_threshold_min = control_threshold  # 拓展控制模式阈值
 
     def show(self):
         """
         显示摇杆。
         """
-        if self.drawer is not None and self.draw_circle_thread is not None and self.draw_circle_thread.is_alive():
+        if self.drawer_running():
             self.drawer.show()
+            return True
         else:
-            self.drawer, self.draw_circle_thread = DrawInScreen.init_drawcircle_thread()
-            self.drawer.show()
+            return False
+            # self.drawer, self.draw_circle_thread = DrawInScreen.init_drawcircle_thread()
+            # self.drawer.show()
 
     def hide(self):
         """
@@ -108,9 +148,11 @@ class JoystickController:
         """
         if self.drawer is not None and self.draw_circle_thread is not None and self.draw_circle_thread.is_alive():
             self.drawer.hide()
+            return True
         else:
-            self.drawer, self.draw_circle_thread = DrawInScreen.init_drawcircle_thread()
-            self.drawer.hide()
+            # self.drawer, self.draw_circle_thread = DrawInScreen.init_drawcircle_thread()
+            return False
+            # self.drawer.hide()
 
     def set_sensitivity(self, sensitivity):
         """
@@ -162,6 +204,24 @@ class JoystickController:
         self.dyn_move_threshold = self.move_threshold
         LowpassFilter.clear_all()
 
+    def is_control_on(self):
+        """
+        检查控制是否开启。
+
+        :return: True 如果控制开启，否则 False
+        """
+        return self.control_on
+    
+    def set_control_dis(self, control_dis):
+        """
+        设置控制距离。
+
+        :param control_dis: 控制距离
+        """
+        if self.control_mode == 4:
+            self.drawer.move_circles(control_dis,0,False)
+
+
     def calculate_movement(self, x, y, control_dis = 0):
         """
         根据输入的坐标计算移动距离。
@@ -191,30 +251,41 @@ class JoystickController:
 
         # 移动摇杆圆
         if self.control_mode in[1,2]: # 拓展控制模式
-            control_dis = math.copysign(min(abs(control_dis), 2.5*self.control_threshold), control_dis)
-        if self.control_mode == 1: # 拓展控制模式
+            update_ratio = 0.02
+            if abs(control_dis) > self.dyn_control_threshold:
+                self.control_on = False
+                self.dyn_control_threshold = self.control_threshold_min
+                LowpassFilter.set_last_value("self.dyn_control_threshold", self.control_threshold_min,update_ratio)
 
-            if abs(control_dis) > self.control_threshold: # 控制距离小于阈值时才启动控制
-                self.drawer.update_circle2(control_dis/self.control_threshold)
-                # self.drawer.move_circles(0,0)
+                # print("control_dis:", control_dis, "dyn_control_threshold:", self.dyn_control_threshold)
+            elif abs(control_dis) < self.dyn_control_threshold : # 控制距离小于阈值时才启动控制
+                self.control_on = True
+                self.dyn_control_threshold = LowpassFilter.run_filter("self.dyn_control_threshold", self.control_threshold_max, update_ratio)
+            # print("dyn_control_threshold:", self.dyn_control_threshold)
+            control_dis = math.copysign(min(abs(control_dis), 2.5*self.control_threshold_min), control_dis)
+        if self.control_mode == 1: # 根据控制距离的大小决定是否输出位移
+            if not self.control_on: # 控制关闭
+                self.drawer.update_circle2(control_dis/self.dyn_control_threshold)
+                self.drawer.move_circles(0,0)
                 self.center_x = x
                 self.center_y = y
                 
-                self.drawer.move_circles(-rpx/self.dyn_move_threshold, rpy/self.dyn_move_threshold)
                 self.clear_movestate()
                 return 0, 0
-            else:
+            else: # 控制距离小于阈值时才启动控制
                 self.drawer.update_circle2(0)
                 self.drawer.move_circles(-rpx/self.dyn_move_threshold, rpy/self.dyn_move_threshold)
-        elif self.control_mode == 2:
-            if abs(control_dis) > self.control_threshold: # 控制距离不影响控制，只影响显示
-                self.drawer.update_circle2(control_dis/self.control_threshold)
+        elif self.control_mode == 2:# 控制距离不影响控制，只影响显示
+            if not self.control_on: # 绘制显示距离
+                self.drawer.update_circle2(control_dis/self.dyn_control_threshold)
             else:
                 self.drawer.update_circle2(0)
             self.drawer.move_circles(-rpx/self.dyn_move_threshold, rpy/self.dyn_move_threshold)
-        else: # 传统控制模式
+        elif self.control_mode == 0: # 传统控制模式
             self.drawer.move_circles(-rpx/self.dyn_move_threshold, rpy/self.dyn_move_threshold)
             self.drawer.update_circle2(0)
+        else:# 其他模式
+            return 0, 0
 
         
         # 重置累积距离的整数部分，因为上一次返回时已经移动过了
@@ -252,7 +323,7 @@ class JoystickController:
         # 更新移动速度                  
         relative_move_dis = (relative_move_x**2 + relative_move_y**2)**0.5 # 计算直接移动的距离
         finger_move_v = relative_move_dis / dt # 计算指尖移动速度
-        update_ratio = 0.2
+        update_ratio = 0.1
         if finger_move_v < self.move_v:
             update_ratio = 1-update_ratio
         self.move_v = self.move_v * (1-update_ratio) + finger_move_v * update_ratio
@@ -335,8 +406,21 @@ class LowpassFilter:
         清除所有低通滤波器。
         """
         cls.filters = {}
+    
+    @classmethod
+    def set_last_value(cls,name, last_value, update_ratio=0.5):
+        """
+        设置指定名称的低通滤波器的上一次输出值。
+        :param name: 滤波器名称
+        :param last_value: 上一次输出值
+        """
+        if name not in cls.filters:  # 如果滤波器不存在，则创建一个新的滤波器实例
+            cls.filters[name] = cls(name, last_value, update_ratio)  # 假设默认的更新比率为0.5
+        else:
+            cls.filters[name].last_value = last_value  # 设置上一次输出值
 
-    def __init__(self, name, input_value,update_ratio):
+
+    def __init__(self, name, input_value,update_ratio=0.5):
         """
         初始化低通滤波器类。
         :param name: 滤波器名称，用于区分不同的滤波器

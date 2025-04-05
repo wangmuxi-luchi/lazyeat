@@ -76,6 +76,18 @@ class GestureSender:
 
         keys = self._parse_keys(gesture_value)
         self._send_keys(keys)
+    
+    def send_keys_by_str(self, keys_str):
+        """
+        根据字符串发送按键事件
+        :param keys_str: 按键字符串（如 'ctrl+r' 或 'F11'）
+        """
+        if not keys_str:
+            return
+        keys = self._parse_keys(keys_str)
+        # for key in keys:
+        #     print(f"Sending key: {key}")
+        self._send_keys(keys)
 
 
 # 示例用法

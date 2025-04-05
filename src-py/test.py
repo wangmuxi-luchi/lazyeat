@@ -4,62 +4,15 @@ from time import sleep
 import win32gui
 import win32con
 import win32api
-from win32con import WS_EX_LAYERED,WS_EX_TRANSPARENT,GWL_EXSTYLE,WS_EX_TOOLWINDOW,HWND_TOPMOST
+from win32con import WS_EX_LAYERED,WS_EX_TRANSPARENT,GWL_EXSTYLE,WS_EX_TOOLWINDOW,HWND_TOPMOST,HWND_TOP
 from win32api import SetWindowLong
-# def on_paint(hdc,paint_area,painter):
-#     # 获取窗口的大小
-#     width = paint_area[2]
-#     height = paint_area[3]
-    
-#     # 创建内存设备上下文
-#     mem_dc = win32gui.CreateCompatibleDC(hdc)
-    
-#     # 创建位图
-#     bitmap = win32gui.CreateCompatibleBitmap(hdc, width, height)
-    
-#     # 将位图选入内存设备上下文
-#     old_bitmap = win32gui.SelectObject(mem_dc, bitmap)
-#     # # 设置位图为透明
-#     # # 创建一个蓝色的画刷
-#     # blue_brush = win32gui.GetStockObject(win32con.NULL_BRUSH)
-#     blue_brush = win32gui.CreateSolidBrush(win32api.RGB(97, 175, 239))
-#     # 将蓝色画刷选入设备上下文
-#     # old_brush = win32gui.SelectObject(mem_dc, blue_brush)
 
-#     # # 绘制椭圆
-#     print("paint ellipse",paint_area)
-#     win32gui.FillRect(mem_dc, paint_area, blue_brush)
-#     # win32gui.Ellipse(mem_dc, paint_area[0]+4, paint_area[1]+4, paint_area[2]-4, paint_area[3]-4)
-#     # 恢复原来的画刷
-#     # win32gui.SelectObject(mem_dc, old_brush)
-#     # 删除创建的画刷
-#     win32gui.DeleteObject(blue_brush)
-#     # Background = win32gui.GetStockObject(win32con.HOLLOW_BRUSH)
-#     # old_brush = win32gui.SelectObject(mem_dc, Background)
-#     # # win32gui.Rectangle(mem_dc, paint_area[3], paint_area[1], paint_area[2], paint_area[3])
-#     # win32gui.Ellipse(mem_dc, paint_area[3], paint_area[1], paint_area[2], paint_area[3])
-#     # win32gui.SelectObject(mem_dc, old_brush)
-#     # win32gui.FillRect(mem_dc, (0, 0, width, height), Background)
-#     # # 使用 win32con.BKMODE_TRANSPARENT 设置背景模式为透明
-#     # win32gui.SetBkMode(mem_dc, win32con.BKMODE_TRANSPARENT)
-#     # # 使用 win32con.PATCOPY 模式填充位图，使其完全透明
-#     # win32gui.BitBlt(mem_dc, 0, 0, width, height, None, 0, 0, win32con.PATCOPY) 
-    
-#     # 在内存设备上下文中绘图
-#     # 示例：绘制一个矩形
-#     # win32gui.Rectangle(mem_dc, 1, 1, width - 1, height - 1)
-#     painter.draw(mem_dc,paint_area)
-    
-#     # 将内存设备上下文的内容复制到屏幕
-#     win32gui.BitBlt(hdc, 0, 0, width, height, mem_dc, 0, 0, win32con.SRCCOPY)
-    
-#     # 恢复旧位图
-#     win32gui.SelectObject(mem_dc, old_bitmap)
-    
-#     # 删除位图和内存设备上下文
-#     win32gui.DeleteObject(bitmap)
-#     win32gui.DeleteDC(mem_dc)   
+tag = True
+big_circle_radius = 50
 
+# 保存当前设备上下文状态
+saved_hdc = None
+tem_hdc = None
 class ScreenDrawer:
     def __init__(self):
         # 定义窗口和圆圈的属性
@@ -78,8 +31,8 @@ class ScreenDrawer:
         # 获取屏幕分辨率
         self.screen_width = win32api.GetSystemMetrics(0)
         self.screen_height = win32api.GetSystemMetrics(1)
-        self.draw_center_x = self.screen_width // 2
-        self.draw_center_y = self.screen_height // 2
+        self.screen_center_x = self.screen_width // 2
+        self.screen_center_y = self.screen_height // 2
 
         # hwnd
         self.big_hwnd = None
@@ -124,8 +77,8 @@ class ScreenDrawer:
         wc.lpfnWndProc = self.WndProc  # 指定消息处理函数
         class_atom = win32gui.RegisterClass(wc)
 
-        cx = self.draw_center_x+self.small_circle_rx - self.small_window_width // 2
-        cy = self.draw_center_y+self.small_circle_ry - self.small_window_height // 2
+        cx = self.screen_center_x+self.small_circle_rx - self.small_window_width // 2
+        cy = self.screen_center_y+self.small_circle_ry - self.small_window_height // 2
         
         window_title = "Small Window"
         self.small_hwnd = win32gui.CreateWindow(
@@ -148,8 +101,8 @@ class ScreenDrawer:
         class_atom = win32gui.RegisterClass(wc)
         
         # 计算窗口左上角的坐标，使其位于屏幕中心
-        center_x = self.draw_center_x - self.big_window_width // 2
-        center_y = self.draw_center_y - self.big_window_height // 2
+        center_x = self.screen_center_x - self.big_window_width // 2
+        center_y = self.screen_center_y - self.big_window_height // 2
 
         # 创建窗口
         window_title = "Big Window"
@@ -167,8 +120,8 @@ class ScreenDrawer:
         class_atom = win32gui.RegisterClass(wc)
         
         # 计算窗口左上角的坐标，使其位于屏幕中心
-        center_x = self.draw_center_x - self.big_window_width // 2
-        center_y = self.draw_center_y - self.big_window_height // 2
+        center_x = self.screen_center_x - self.big_window_width // 2
+        center_y = self.screen_center_y - self.big_window_height // 2
 
         # 创建窗口
         window_title = "circle2 Window"
@@ -182,7 +135,7 @@ class ScreenDrawer:
 
         win32gui.SetWindowPos(
                 self.big_hwnd,
-                HWND_TOPMOST,  # 设置为顶层窗口 设置窗口为顶层且不显示任务栏图标
+                HWND_TOP,  # 设置为顶层窗口 设置窗口为顶层且不显示任务栏图标
                 0, 0, 0, 0,  # 不改变窗口的位置和大小
                 win32con.SWP_NOMOVE | win32con.SWP_NOSIZE  # 不移动、不改变大小
         )
@@ -230,52 +183,26 @@ class ScreenDrawer:
             if hwnd:
                 win32gui.ShowWindow(hwnd, win32con.SW_HIDE)
                 win32gui.UpdateWindow(hwnd)
-    def only_show(self, show_big = True, show_small = True):
-        # 隐藏窗口
-        if show_big:
-            win32gui.ShowWindow(self.big_hwnd, win32con.SW_SHOW)
-        else:
-            win32gui.ShowWindow(self.big_hwnd, win32con.SW_HIDE)
-        win32gui.UpdateWindow(self.big_hwnd)
-        if show_small:
-            win32gui.ShowWindow(self.small_hwnd, win32con.SW_SHOW)
-        else:
-            win32gui.ShowWindow(self.small_hwnd, win32con.SW_HIDE)
-        win32gui.UpdateWindow(self.small_hwnd)
 
-        win32gui.ShowWindow(self.circle2_hwnd, win32con.SW_HIDE)
-        win32gui.UpdateWindow(self.circle2_hwnd)
-        self.move_circles(0,0,False)
-
-    def set_big_circle_color(self, color):
-        self.big_circle_color = color
-        # 更新窗口
-        win32gui.InvalidateRect(self.big_hwnd, None, True)
-        win32gui.UpdateWindow(self.big_hwnd)
-
-    def move_circles(self, relative_x, relative_y, mouse_center = True):
+    def move_circles(self, relative_x, relative_y):
         mouse = win32api.GetCursorPos()
-        if mouse_center:
-            self.draw_center_x = mouse[0]
-            self.draw_center_y = mouse[1]
-        else:
-            self.draw_center_x = self.screen_width // 2
-            self.draw_center_y = self.screen_height // 2
+        self.screen_center_x = mouse[0]
+        self.screen_center_y = mouse[1]
         self.move_big_circle(0, 0)
         self.move_small_circle(relative_x, relative_y)
 
     def move_big_circle(self, relative_x, relative_y):
         # 计算窗口左上角的坐标，使其位于屏幕中心
-        left = self.draw_center_x - self.big_window_width // 2
-        top = self.draw_center_y - self.big_window_height // 2
+        left = self.screen_center_x - self.big_window_width // 2
+        top = self.screen_center_y - self.big_window_height // 2
         win32gui.PostMessage(self.big_hwnd, win32con.WM_MOVE, 0, (top << 16) | left)
 
     def move_small_circle(self, relative_x, relative_y):
         
         # 归一化坐标转窗口中心像素坐标，relative_x为1时大圆小圆刚好相切
         scale = self.big_circle_radius - self.small_circle_radius
-        cx = relative_x*scale + self.draw_center_x
-        cy = relative_y*scale + self.draw_center_y
+        cx = relative_x*scale + self.screen_center_x
+        cy = relative_y*scale + self.screen_center_y
 
         # 计算窗口左上角的坐标
         new_x = int(cx - self.small_window_width // 2)
@@ -285,8 +212,8 @@ class ScreenDrawer:
 
     def move_circle2(self, relative_poision):
         # 归一化坐标转窗口中心像素坐标，relative_poision为1时圆刚好相切
-        cx = self.draw_center_x - (self.big_circle_radius+self.circle2_circle_radius) * relative_poision
-        cy = self.draw_center_y
+        cx = self.screen_center_x - (self.big_circle_radius+self.circle2_circle_radius) * relative_poision
+        cy = self.screen_center_y
         cx = int(cx)
         cy = int(cy)
         left = cx - self.circle2_window_width // 2
@@ -341,6 +268,7 @@ class ScreenDrawer:
 
     # 窗口过程函数
     def WndProc(self, hwnd, msg, wParam, lParam):
+        # print("一条消息{}",msg)
         if hwnd == self.big_hwnd:
             # # print("big hwnd")
             return self.big_WndProc(hwnd, msg, wParam, lParam)
@@ -357,20 +285,21 @@ class ScreenDrawer:
             win32gui.PostQuitMessage(0)
             return 0
         elif msg == win32con.WM_PAINT:
+
             hdc, paintStruct = win32gui.BeginPaint(hwnd)
-            paint_area = paintStruct[2]
-            if paint_area[2]>self.small_circle_radius*2 and paint_area[3]>self.small_circle_radius*2:
-                # on_paint(hdc,paint_area,self)
-                cx = paint_area[0]+paint_area[2]//2
-                cy = paint_area[1]+paint_area[3]//2
-                # print(f"绘制小圆: x={cx}, y={cy}, r={self.small_circle_radius}, color={self.small_circle_color}")
-                self.draw_circle(hdc, cx, cy, self.small_circle_radius, self.small_circle_color)
-                # if self.draw_circle2:
-                #     print(f"绘制小圆2: x={cx}, y={cy}, r={self.small_circle_2_radius}, color={self.small_circle_2_color}")
-                #     self.draw_circle(hdc, cx, cy, self.small_circle_2_radius, self.small_circle_color)
-            else:
-                # print("不绘制小圆,paint_area{ paint_area[2]},{paint_area[3]}")
-                pass
+            # paint_area = paintStruct[2]
+            # if paint_area[2]>self.small_circle_radius*2 and paint_area[3]>self.small_circle_radius*2:
+            #     # on_paint(hdc,paint_area,self)
+            #     cx = paint_area[0]+paint_area[2]//2
+            #     cy = paint_area[1]+paint_area[3]//2
+            #     # print(f"绘制小圆: x={cx}, y={cy}, r={self.small_circle_radius}, color={self.small_circle_color}")
+            #     self.draw_circle(hdc, cx, cy, self.small_circle_radius, self.small_circle_color)
+            #     # if self.draw_circle2:
+            #     #     print(f"绘制小圆2: x={cx}, y={cy}, r={self.small_circle_2_radius}, color={self.small_circle_2_color}")
+            #     #     self.draw_circle(hdc, cx, cy, self.small_circle_2_radius, self.small_circle_color)
+            # else:
+            #     # print("不绘制小圆,paint_area{ paint_area[2]},{paint_area[3]}")
+            #     pass
             win32gui.EndPaint(hwnd, paintStruct)
             
             
@@ -404,26 +333,85 @@ class ScreenDrawer:
     #         self.draw_circle(hdc, cx, cy, self.small_circle_2_radius, self.small_circle_color)
             
     def big_WndProc(self, hwnd, msg, wParam, lParam):
+        print("big_WndProc {}",msg)
         if msg == win32con.WM_DESTROY:
             # print("big WM_DESTROY")
             win32gui.PostQuitMessage(0)
             return 0
         elif msg == win32con.WM_PAINT:
-            # print("big WM_PAINT")
+            print("big WM_PAINT")
+            # if tag:
             hdc, paintStruct = win32gui.BeginPaint(hwnd)
             paint_area = paintStruct[2]
             # print(f"big WM_PAINT: paint_area{paint_area[0]},{paint_area[1]},{paint_area[2]},{paint_area[3]}")
-            if paint_area[2]>self.big_circle_radius*2 and paint_area[3]>self.big_circle_radius*2:
-                cx = paint_area[0]+paint_area[2]//2
-                cy = paint_area[1]+paint_area[3]//2
-                # print(f"绘制大圆: x={cx}, y={cy}, r={self.big_circle_radius}, color={self.big_circle_color}")
-                self.draw_circle(hdc, cx, cy, self.big_circle_radius, self.big_circle_color)
-            else:
-                # print("不绘制大圆")
-                pass
+            # if paint_area[2]>self.big_circle_radius*2 and paint_area[3]>self.big_circle_radius*2:
+            #     # global saved_dc
+            #     # global tem_hdc
+            #     # if saved_dc is None:
+            #     #     tem_hdc = win32gui.GetDC(hwnd)
+            #     #     saved_dc = win32gui.SaveDC(tem_hdc)
+            #     #     print("tem_hdc:{},saved_dc:{}",tem_hdc,saved_dc)
+            #     # else:
+            #     #     win32gui.RestoreDC(tem_hdc, saved_dc)
+            #     #     print("tem_hdc:{},saved_dc:{}",tem_hdc,saved_dc)
+                
+            #     # saved_dc = win32gui.SaveDC(hdc)
+            #     cx = paint_area[0]+paint_area[2]//2
+            #     cy = paint_area[1]+paint_area[3]//2
+            #     # print(f"绘制大圆: x={cx}, y={cy}, r={self.big_circle_radius}, color={self.big_circle_color}")
+            #     self.draw_circle(hdc, cx, cy, big_circle_radius, self.big_circle_color)
+            #     # win32gui.RestoreDC(hdc, saved_dc)
+            # else:
+            #     # print("不绘制大圆")
+            #     pass
+   
+            if tag:
+                if paint_area[2]>self.big_circle_radius*2 and paint_area[3]>self.big_circle_radius*2:
+                    cx = paint_area[0]+paint_area[2]//2
+                    cy = paint_area[1]+paint_area[3]//2
+                    # 重新绘制背景
+
+                    hbrBackground = win32gui.GetStockObject(win32con.NULL_BRUSH)
+                    win32gui.FillRect(hdc, paint_area, hbrBackground)
+
+                    self.draw_circle(hdc, cx, cy, big_circle_radius, self.big_circle_color)
+                    # print(f"绘制大圆: x={cx}, y={cy}, r={self.big_circle_radius}, color={self.big_circle_color}")
+
+                    # # 创建兼容 HDC
+                    # hdc_copy = win32gui.CreateCompatibleDC(hdc)
+                    
+                    # # 获取窗口大小
+                    # left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+                    # width = right - left
+                    # height = bottom - top
+                    
+                    # # 复制内容
+                    # win32gui.BitBlt(hdc_copy, 0, 0, width, height, hdc, 0, 0, win32con.SRCCOPY)
+                    
+                    # # 绘制
+                    # print("绘制新的圆")
+                    win32gui.SetROP2(hdc,win32con.R2_NOT)
+                    self.draw_circle(hdc, cx, cy, big_circle_radius-5, self.big_circle_color)
+                    self.draw_circle(hdc, cx, cy, big_circle_radius-5, self.big_circle_color)
+
+                    # 恢复内容
+                    # win32gui.BitBlt(hdc, 0, 0, width, height, hdc_copy, 0, 0, win32con.SRCCOPY)
+                    
+                    # # 释放资源
+                    # # win32gui.SelectObject(hdc_copy, old_bitmap)
+                    # # win32gui.DeleteObject(hbitmap)
+                    # win32gui.DeleteDC(hdc_copy)
+                    # win32gui.ReleaseDC(hwnd, hdc)
+                else:
+                    # print("不绘制大圆")
+                    pass
+            else:          
+                print("copy test")      
+
             win32gui.EndPaint(hwnd, paintStruct)
             
             
+            # return win32gui.DefWindowProc(hwnd, msg, wParam, lParam)
             return 0
         elif msg == win32con.WM_MOVE:
             # 获取新的位置
@@ -441,7 +429,7 @@ class ScreenDrawer:
         # elif msg == 20:
         #     # print("拦截一条消息{}",msg)
         #     return 0
-        # print("big_WndProc {}",msg)
+        print("big_WndProc {}",msg)
         return win32gui.DefWindowProc(hwnd, msg, wParam, lParam)
     
     def circle2_WndProc(self, hwnd, msg, wParam, lParam):
@@ -451,13 +439,13 @@ class ScreenDrawer:
             return 0
         elif msg == win32con.WM_PAINT:
             hdc, paintStruct = win32gui.BeginPaint(hwnd)
-            paint_area = paintStruct[2]
-            if paint_area[2]>self.circle2_circle_radius*2 and paint_area[3]>self.circle2_circle_radius*2:
-                cx = paint_area[0]+paint_area[2]//2
-                cy = paint_area[1]+paint_area[3]//2
-                self.draw_circle(hdc, cx, cy, self.circle2_circle_radius, self.circle2_circle_color)
-            else:
-                pass
+            # paint_area = paintStruct[2]
+            # if paint_area[2]>self.circle2_circle_radius*2 and paint_area[3]>self.circle2_circle_radius*2:
+            #     cx = paint_area[0]+paint_area[2]//2
+            #     cy = paint_area[1]+paint_area[3]//2
+            #     self.draw_circle(hdc, cx, cy, self.circle2_circle_radius, self.circle2_circle_color)
+            # else:
+            #     pass
             win32gui.EndPaint(hwnd, paintStruct)
             
             
@@ -563,14 +551,24 @@ if __name__ == "__main__":
     drawer.show()
     drawer.move_small_circle(0.5,0.5)
     sleep(4)
-    drawer.set_circle_2()
-    drawer.update_circle2(1.8)
-    sleep(4)
-    drawer.move_small_circle(-0.5,-0.5)
-    drawer.update_circle2(1.5)
-    sleep(4)
-    drawer.update_circle2(0.5)
-    sleep(4)
-    drawer.close_window()
 
-    sleep(10)
+    big_circle_radius = 30
+    win32gui.InvalidateRect(drawer.big_hwnd, None, True)
+    # 强制窗口立即处理 WM_PAINT 消息
+    win32gui.UpdateWindow(drawer.big_hwnd)
+    sleep(4)
+
+    # big_circle_radius = 10
+    tag = False
+    win32gui.InvalidateRect(drawer.big_hwnd, None, True)
+    # 强制窗口立即处理 WM_PAINT 消息
+    win32gui.UpdateWindow(drawer.big_hwnd)
+    # drawer.move_small_circle(-0.5,-0.5)
+
+    # drawer.update_circle2(1.5)
+    # sleep(4)
+    # drawer.update_circle2(0.5)
+    # sleep(4)
+    # drawer.close_window()
+
+    sleep(10000)
